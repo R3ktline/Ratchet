@@ -1,0 +1,31 @@
+/* Notebook color dots (names match library::PALETTE). */
+.nb-dot {
+  min-width: 10px;
+  min-height: 10px;
+  border-radius: 50%;
+}
+.nb-blue { background: #3584e4; }
+.nb-green { background: #33d17a; }
+.nb-orange { background: #ff7800; }
+.nb-purple { background: #9141ac; }
+.nb-red { background: #e01b24; }
+.nb-teal { background: #2190a4; }
+.nb-yellow { background: #f6d32d; }
+.nb-pink { background: #d56199; }
+.nb-brown { background: #986a44; }
+.nb-slate { background: #6f8396; }
+
+.notebook-row label {
+  font-weight: bold;
+}
+
+/* Drag & drop indicators in the sidebar. */
+row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent-bg-color);
+}
+row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent-bg-color);
+}
+row.drop-into {
+  background: alpha(var(--accent-bg-color), 0.25);
+}
