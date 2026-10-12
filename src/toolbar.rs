@@ -14,6 +14,7 @@ use gtk::{gdk, gio, glib};
 use crate::canvas::{Action, TextCommand};
 use crate::text::TextSize;
 use crate::ink::{InkColor, Tool};
+use crate::glyphs::{draw_color, eraser_glyph, hand_glyph, select_glyph, slot_glyph};
 use crate::settings::{ActiveTool, EraserMode, PenSlot};
 
 /// Colors offered in the slot editor.
@@ -56,6 +57,7 @@ pub struct Toolbar {
     eraser: gtk::ToggleButton,
     select: gtk::ToggleButton,
     text: gtk::ToggleButton,
+    hand: gtk::ToggleButton,
     text_options: gtk::Revealer,
     size: gtk::DropDown,
     font: gtk::FontDialogButton,
@@ -71,75 +73,6 @@ pub struct Toolbar {
     /// already active (and shouldn't open the editor).
     just_activated: Cell<bool>,
     on_change: Box<dyn Fn(&ToolState)>,
-}
-
-fn draw_color(color: InkColor) -> (f64, f64, f64) {
-    let (r, g, b) = color.resolve(adw::StyleManager::default().is_dark());
-    (r as f64, g as f64, b as f64)
-}
-
-/// Small preview of a pen slot: a dot sized by width, or a highlighter bar.
-fn slot_glyph(slot: &PenSlot) -> gtk::DrawingArea {
-    let area = gtk::DrawingArea::builder().content_width(22).content_height(22).build();
-    let slot = slot.clone();
-    area.set_draw_func(move |_, cr, w, h| {
-        let (cx, cy) = (w as f64 / 2.0, h as f64 / 2.0);
-        let (r, g, b) = draw_color(slot.color);
-        match slot.tool {
-            Tool::Pen => {
-                let (lo, hi) = PenSlot::range(Tool::Pen);
-                let t = ((slot.width_mm as f64 - lo) / (hi - lo)).clamp(0.0, 1.0);
-                cr.set_source_rgb(r, g, b);
-                cr.arc(cx, cy, 2.5 + t.sqrt() * 6.0, 0.0, std::f64::consts::TAU);
-                let _ = cr.fill();
-            }
-            Tool::Highlighter => {
-                cr.set_source_rgba(r, g, b, 0.75);
-                let (bw, bh) = (16.0, 9.0);
-                cr.rectangle(cx - bw / 2.0, cy - bh / 2.0, bw, bh);
-                let _ = cr.fill();
-            }
-        }
-    });
-    area
-}
-
-fn eraser_glyph() -> gtk::DrawingArea {
-    let area = gtk::DrawingArea::builder().content_width(22).content_height(22).build();
-    area.set_draw_func(|area, cr, w, h| {
-        let fg = area.color();
-        cr.translate(w as f64 / 2.0, h as f64 / 2.0);
-        cr.rotate(-std::f64::consts::FRAC_PI_4);
-        cr.set_source_rgba(fg.red() as f64, fg.green() as f64, fg.blue() as f64, 1.0);
-        cr.set_line_width(1.5);
-        cr.rectangle(-8.0, -4.5, 16.0, 9.0);
-        let _ = cr.stroke();
-        cr.rectangle(-8.0, -4.5, 6.0, 9.0);
-        let _ = cr.fill();
-    });
-    area
-}
-
-/// Dashed lasso loop.
-fn select_glyph() -> gtk::DrawingArea {
-    let area = gtk::DrawingArea::builder().content_width(22).content_height(22).build();
-    area.set_draw_func(|area, cr, w, h| {
-        let fg = area.color();
-        cr.set_source_rgba(fg.red() as f64, fg.green() as f64, fg.blue() as f64, 1.0);
-        cr.set_line_width(1.5);
-        cr.set_dash(&[3.0, 2.0], 0.0);
-        cr.save().ok();
-        cr.translate(w as f64 / 2.0, h as f64 / 2.0 - 1.0);
-        cr.scale(1.0, 0.7);
-        cr.arc(0.0, 0.0, 8.0, 0.0, std::f64::consts::TAU);
-        cr.restore().ok();
-        let _ = cr.stroke();
-        cr.set_dash(&[], 0.0);
-        cr.move_to(w as f64 / 2.0 - 3.0, h as f64 / 2.0 + 4.0);
-        cr.line_to(w as f64 / 2.0 - 5.0, h as f64 / 2.0 + 9.0);
-        let _ = cr.stroke();
-    });
-    area
 }
 
 fn swatch(color: InkColor, selected: bool) -> gtk::DrawingArea {
@@ -195,6 +128,13 @@ impl Toolbar {
         let text = gtk::ToggleButton::builder()
             .icon_name("insert-text-symbolic")
             .tooltip_text("Text — click to type, drag to set a width; $…$ for math")
+            .css_classes(["flat"])
+            .group(&eraser)
+            .build();
+
+        let hand = gtk::ToggleButton::builder()
+            .child(&hand_glyph())
+            .tooltip_text("Pan — drag the page")
             .css_classes(["flat"])
             .group(&eraser)
             .build();
@@ -259,6 +199,7 @@ impl Toolbar {
         widget.append(&select);
         widget.append(&text);
         widget.append(&text_options);
+        widget.append(&hand);
         widget.append(&gtk::Separator::new(gtk::Orientation::Vertical));
         widget.append(&undo);
         widget.append(&redo);
@@ -269,6 +210,7 @@ impl Toolbar {
             eraser,
             select,
             text,
+            hand,
             text_options,
             size,
             font,
@@ -344,6 +286,15 @@ impl Toolbar {
         });
 
         let weak = Rc::downgrade(&this);
+        this.hand.connect_toggled(move |b| {
+            let Some(this) = weak.upgrade() else { return };
+            if b.is_active() {
+                this.restoring.set(false);
+                this.state.borrow_mut().active = ActiveTool::Hand;
+                this.changed();
+            }
+        });
+        let weak = Rc::downgrade(&this);
         this.text.connect_toggled(move |b| {
             let Some(this) = weak.upgrade() else { return };
             if b.is_active() {
@@ -388,6 +339,23 @@ impl Toolbar {
 
         this.rebuild();
         this
+    }
+
+    /// Switch tools as if the button had been clicked (radial menu).
+    pub fn select_tool(&self, tool: ActiveTool) {
+        match tool {
+            ActiveTool::Slot(i) => {
+                if let Some(b) = self.buttons.borrow().get(i) {
+                    b.set_active(true);
+                }
+            }
+            ActiveTool::Eraser => self.eraser.set_active(true),
+            ActiveTool::Select => self.select.set_active(true),
+            ActiveTool::Text => self.text.set_active(true),
+            ActiveTool::Hand => self.hand.set_active(true),
+        }
+        // Not a click on an already active button: never open an editor.
+        self.just_activated.set(false);
     }
 
     fn show_text_options(&self, show: bool) {
@@ -483,6 +451,7 @@ impl Toolbar {
             ActiveTool::Eraser => self.eraser.set_active(true),
             ActiveTool::Select => self.select.set_active(true),
             ActiveTool::Text => self.text.set_active(true),
+            ActiveTool::Hand => self.hand.set_active(true),
             ActiveTool::Slot(_) => {}
         }
         self.just_activated.set(false);

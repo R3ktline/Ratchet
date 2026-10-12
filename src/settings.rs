@@ -149,13 +149,21 @@ pub enum ButtonAction {
     Select,
     /// Draw with the current pen, whatever tool is selected.
     Draw,
+    /// Open the radial menu at the pen.
+    Menu,
     /// Leave it to the system (a normal middle/right click).
     Click,
 }
 
 impl ButtonAction {
-    pub const ALL: [ButtonAction; 5] =
-        [ButtonAction::Eraser, ButtonAction::Pan, ButtonAction::Select, ButtonAction::Draw, ButtonAction::Click];
+    pub const ALL: [ButtonAction; 6] = [
+        ButtonAction::Menu,
+        ButtonAction::Eraser,
+        ButtonAction::Pan,
+        ButtonAction::Select,
+        ButtonAction::Draw,
+        ButtonAction::Click,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -163,6 +171,7 @@ impl ButtonAction {
             ButtonAction::Pan => "Pan",
             ButtonAction::Select => "Select",
             ButtonAction::Draw => "Draw",
+            ButtonAction::Menu => "Radial menu",
             ButtonAction::Click => "Normal click",
         }
     }
@@ -175,6 +184,99 @@ pub enum ActiveTool {
     Eraser,
     Select,
     Text,
+    /// Pen/mouse drag the page.
+    Hand,
+}
+
+/// An entry of the radial menu.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RadialItem {
+    /// A pen slot by index.
+    Slot(usize),
+    Eraser,
+    Select,
+    Text,
+    Hand,
+    Undo,
+    Redo,
+    NewPage,
+    Paste,
+    ZoomReset,
+    Fullscreen,
+    None,
+}
+
+impl RadialItem {
+    /// Everything that can be put in the menu (slots are added separately).
+    pub const ACTIONS: [RadialItem; 11] = [
+        RadialItem::Eraser,
+        RadialItem::Select,
+        RadialItem::Text,
+        RadialItem::Hand,
+        RadialItem::Undo,
+        RadialItem::Redo,
+        RadialItem::NewPage,
+        RadialItem::Paste,
+        RadialItem::ZoomReset,
+        RadialItem::Fullscreen,
+        RadialItem::None,
+    ];
+
+    /// Theme icon for items that have one (pens/eraser/lasso/hand are
+    /// drawn by hand, see glyphs.rs).
+    pub fn icon_name(self) -> Option<&'static str> {
+        Some(match self {
+            RadialItem::Text => "insert-text-symbolic",
+            RadialItem::Undo => "edit-undo-symbolic",
+            RadialItem::Redo => "edit-redo-symbolic",
+            RadialItem::NewPage => "document-new-symbolic",
+            RadialItem::Paste => "edit-paste-symbolic",
+            RadialItem::ZoomReset => "zoom-original-symbolic",
+            RadialItem::Fullscreen => "view-fullscreen-symbolic",
+            _ => return None,
+        })
+    }
+
+    pub fn label(self) -> String {
+        match self {
+            RadialItem::Slot(i) => format!("Pen slot {}", i + 1),
+            RadialItem::Eraser => "Eraser".into(),
+            RadialItem::Select => "Select".into(),
+            RadialItem::Text => "Text".into(),
+            RadialItem::Hand => "Pan (hand tool)".into(),
+            RadialItem::Undo => "Undo".into(),
+            RadialItem::Redo => "Redo".into(),
+            RadialItem::NewPage => "New page".into(),
+            RadialItem::Paste => "Paste".into(),
+            RadialItem::ZoomReset => "Zoom to 100%".into(),
+            RadialItem::Fullscreen => "Fullscreen".into(),
+            RadialItem::None => "(empty)".into(),
+        }
+    }
+}
+
+/// How many items the radial menu can hold; the ring spreads them evenly.
+pub const RADIAL_MIN: usize = 2;
+pub const RADIAL_MAX: usize = 12;
+
+/// Default radial menu, clockwise from the top.
+pub fn default_radial(pens: &[PenSlot]) -> Vec<RadialItem> {
+    let pen = |n: usize| pens.iter().enumerate().filter(|(_, p)| p.tool == Tool::Pen).nth(n).map(|(i, _)| i);
+    let hl = pens.iter().position(|p| p.tool == Tool::Highlighter);
+    [
+        pen(0).map(RadialItem::Slot),
+        Some(RadialItem::Hand),
+        Some(RadialItem::Eraser),
+        Some(RadialItem::Undo),
+        Some(RadialItem::Redo),
+        Some(RadialItem::Select),
+        hl.map(RadialItem::Slot),
+        pen(1).map(RadialItem::Slot),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 /// Unit for custom page sizes.
@@ -208,7 +310,7 @@ impl LengthUnit {
 }
 
 /// Bumped when defaults change in a way that should reach existing users.
-const SETTINGS_VERSION: u32 = 2;
+const SETTINGS_VERSION: u32 = 4;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default)]
@@ -236,26 +338,34 @@ pub struct Settings {
     /// Defaults for new text boxes.
     pub text_size: TextSize,
     pub text_font: Option<String>,
+    pub radial_items: Vec<RadialItem>,
+    /// Holding the tip still this long opens the radial menu (None = off).
+    pub long_press_ms: Option<u32>,
+    /// Holding still at the end of a stroke this long snaps it to a shape.
+    pub shape_hold_ms: Option<u32>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Settings {
             version: SETTINGS_VERSION,
-            theme: Theme::default(),
+            theme: Theme::Dark,
             library_dir: None,
             last_page: None,
             expanded: Vec::new(),
             pens: default_pens(),
             active_tool: ActiveTool::Slot(0),
             eraser_mode: EraserMode::default(),
-            smoothing: Smoothing::default(),
-            pen_button_2: ButtonAction::Pan,
-            pen_button_3: ButtonAction::Click,
+            smoothing: Smoothing::Low,
+            pen_button_2: ButtonAction::Menu,
+            pen_button_3: ButtonAction::Pan,
             pen_eraser: ButtonAction::Eraser,
             custom_unit: LengthUnit::default(),
             text_size: TextSize::default(),
             text_font: None,
+            radial_items: default_radial(&default_pens()),
+            long_press_ms: Some(600),
+            shape_hold_ms: Some(500),
         }
     }
 }
@@ -280,9 +390,25 @@ impl Settings {
             s.pen_button_3 = ButtonAction::Click;
             s.pen_eraser = ButtonAction::Eraser;
         }
+        if s.version < 3 {
+            // The middle button opens the radial menu; the right one pans.
+            s.pen_button_2 = ButtonAction::Menu;
+            s.pen_button_3 = ButtonAction::Pan;
+            s.radial_items = default_radial(&s.pens);
+        }
+        if s.version == 3 {
+            // Long press got 40% shorter (older files never had one saved).
+            s.long_press_ms = s.long_press_ms.map(|ms| ms * 6 / 10);
+        }
         s.version = SETTINGS_VERSION;
         if s.pens.is_empty() {
             s.pens = default_pens();
+        }
+        // The menu has no empty spots any more: it shrinks to what's in it.
+        s.radial_items.retain(|i| *i != RadialItem::None);
+        s.radial_items.truncate(RADIAL_MAX);
+        if s.radial_items.len() < RADIAL_MIN {
+            s.radial_items = default_radial(&s.pens);
         }
         if matches!(s.active_tool, ActiveTool::Slot(i) if i >= s.pens.len()) {
             s.active_tool = ActiveTool::Slot(0);
@@ -320,9 +446,15 @@ mod tests {
         let mut s: Settings = serde_json::from_str(old).unwrap();
         assert_eq!(s.version, 0);
         s = Settings::migrate(s);
-        assert_eq!((s.pen_button_2, s.pen_button_3, s.pen_eraser), (ButtonAction::Pan, ButtonAction::Click, ButtonAction::Eraser));
+        assert_eq!((s.pen_button_2, s.pen_button_3, s.pen_eraser), (ButtonAction::Menu, ButtonAction::Pan, ButtonAction::Eraser));
+        assert_eq!(s.radial_items[0], RadialItem::Slot(0));
+        assert_eq!(s.radial_items[1], RadialItem::Hand);
+        assert_eq!(s.radial_items[6], RadialItem::Slot(4));
         // Already migrated settings keep the user's choices.
-        let mut s2: Settings = serde_json::from_str(r#"{"version":2,"pen_button_2":"select"}"#).unwrap();
+        assert_eq!(s.long_press_ms, Some(600));
+        let v3: Settings = serde_json::from_str(r#"{"version":3,"long_press_ms":1200}"#).unwrap();
+        assert_eq!(Settings::migrate(v3).long_press_ms, Some(720));
+        let mut s2: Settings = serde_json::from_str(r#"{"version":4,"pen_button_2":"select"}"#).unwrap();
         s2 = Settings::migrate(s2);
         assert_eq!(s2.pen_button_2, ButtonAction::Select);
     }

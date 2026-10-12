@@ -9,13 +9,14 @@ use std::time::Duration;
 use adw::prelude::*;
 use gtk::{gdk, gio, glib};
 
-use crate::canvas::{Brush, Canvas, CanvasTool, DebugFlags};
+use crate::canvas::{Brush, Canvas, CanvasTool, DebugFlags, EntryLook, RadialEntry};
+use crate::ink::Tool;
 use crate::debug::{self, LogWindow};
 use crate::ink::PX_PER_MM;
 use crate::library::{Detached, Library, Target};
 use crate::page_menu;
 use crate::preferences::{self, Prefs};
-use crate::settings::{ActiveTool, Settings, Theme};
+use crate::settings::{ActiveTool, RadialItem, Settings, Theme};
 use crate::toolbar::{self, ToolState, Toolbar};
 
 const SIDEBAR_ANIMATION_MS: u32 = 160;
@@ -69,6 +70,7 @@ pub struct Window {
     page_button: gtk::MenuButton,
     debug_flags: std::cell::Cell<DebugFlags>,
     log_window: std::cell::OnceCell<LogWindow>,
+    split: std::cell::OnceCell<adw::OverlaySplitView>,
     state: RefCell<State>,
 }
 
@@ -206,6 +208,7 @@ impl Window {
                 .build(),
             debug_flags: Default::default(),
             log_window: Default::default(),
+            split: Default::default(),
             state: RefCell::new(State {
                 lib,
                 settings,
@@ -319,6 +322,11 @@ impl Window {
         });
         let toolbar = self.toolbar.clone();
         self.canvas.connect_temp_tool(move |action| toolbar.set_temp_tool(action));
+        let weak = self.weak();
+        self.canvas.connect_menu(move |item| {
+            let this = upgrade!(weak);
+            this.radial_pick(item);
+        });
         let zoom_button = self.zoom_button.clone();
         self.canvas.connect_zoom(move |z| zoom_button.set_label(&format!("{:.0}%", z * 100.0)));
 
@@ -358,6 +366,7 @@ impl Window {
             .max_sidebar_width(320.0)
             .build();
         split.bind_property("show-sidebar", &toggle_sidebar, "active").bidirectional().build();
+        let _ = self.split.set(split.clone());
 
         // Collapse the sidebar into an overlay on narrow windows.
         let narrow = adw::Breakpoint::new(adw::BreakpointCondition::new_length(
@@ -532,10 +541,43 @@ impl Window {
             }
         }
         self.state.borrow_mut().rows = rows;
+        self.fit_sidebar_width();
         match selected_row {
             Some(row) => self.list.select_row(Some(&row)),
             None => self.list.unselect_all(),
         }
+    }
+
+    /// Size the sidebar to its longest entry (all of them, collapsed or
+    /// not, so it doesn't jump when expanding) plus a little room.
+    fn fit_sidebar_width(&self) {
+        let Some(split) = self.split.get() else { return };
+        let st = self.state.borrow();
+        let text_width = |text: &str, bold: bool| {
+            let layout = self.list.create_pango_layout(Some(text));
+            if bold {
+                let attrs = gtk::pango::AttrList::new();
+                attrs.insert(gtk::pango::AttrInt::new_weight(gtk::pango::Weight::Bold));
+                layout.set_attributes(Some(&attrs));
+            }
+            layout.pixel_size().0 as f64
+        };
+        // Row margins (10 + 10), spacing 8, the list's own row inset (~12),
+        // and breathing room.
+        const CHROME: f64 = 10.0 + 10.0 + 12.0 + 20.0;
+        let mut widest: f64 = 0.0;
+        for nb in &st.lib.notebooks {
+            widest = widest.max(10.0 + 8.0 + text_width(&nb.name, true));
+            for sec in &nb.sections {
+                widest = widest.max(16.0 + 16.0 + 8.0 + text_width(&sec.name, false));
+                for page in &sec.pages {
+                    widest = widest.max(32.0 + 16.0 + 8.0 + text_width(&page.title, false));
+                }
+            }
+        }
+        let width = (widest + CHROME).clamp(200.0, 380.0);
+        split.set_min_sidebar_width(width);
+        split.set_max_sidebar_width(width);
     }
 
     fn make_row(
@@ -547,6 +589,8 @@ impl Window {
     ) -> gtk::ListBoxRow {
         let hbox = gtk::Box::builder().spacing(8).build();
         match expanded {
+            // Notebooks show only their color dot (arrows there are clutter).
+            Some(_) if depth == 0 => {}
             Some(open) => {
                 let icon = if open { "pan-down-symbolic" } else { "pan-end-symbolic" };
                 hbox.append(&gtk::Image::from_icon_name(icon));
@@ -1049,6 +1093,26 @@ impl Window {
         self.window.add_controller(keys);
     }
 
+    /// Run what was picked in the radial menu.
+    fn radial_pick(self: &Rc<Self>, item: RadialItem) {
+        match item {
+            RadialItem::Slot(i) => self.toolbar.select_tool(ActiveTool::Slot(i)),
+            RadialItem::Eraser => self.toolbar.select_tool(ActiveTool::Eraser),
+            RadialItem::Select => self.toolbar.select_tool(ActiveTool::Select),
+            RadialItem::Text => self.toolbar.select_tool(ActiveTool::Text),
+            RadialItem::Hand => self.toolbar.select_tool(ActiveTool::Hand),
+            RadialItem::Undo => self.canvas.undo(),
+            RadialItem::Redo => self.canvas.redo(),
+            RadialItem::NewPage => self.new_page(None),
+            RadialItem::Paste => self.canvas.paste(true),
+            RadialItem::ZoomReset => self.canvas.zoom_centered(1.0),
+            RadialItem::Fullscreen => {
+                let _ = WidgetExt::activate_action(&self.window, "win.fullscreen", None);
+            }
+            RadialItem::None => {}
+        }
+    }
+
     // ---- page controls -----------------------------------------------------------
 
     /// Orientation new sheet pages follow: the monitor's in fullscreen,
@@ -1177,6 +1241,19 @@ impl Window {
     fn tools_changed(&self, t: &ToolState) {
         {
             let mut st = self.state.borrow_mut();
+            // A removed slot shifts the ones after it; keep the radial
+            // menu pointing at the same pens.
+            let old = &st.settings.pens;
+            if t.pens.len() + 1 == old.len() {
+                let removed = (0..old.len()).find(|&i| t.pens.get(i) != old.get(i)).unwrap_or(old.len() - 1);
+                for item in &mut st.settings.radial_items {
+                    *item = match *item {
+                        RadialItem::Slot(i) if i == removed => RadialItem::None,
+                        RadialItem::Slot(i) if i > removed => RadialItem::Slot(i - 1),
+                        other => other,
+                    };
+                }
+            }
             st.settings.pens = t.pens.clone();
             st.settings.active_tool = t.active;
             st.settings.eraser_mode = t.eraser_mode;
@@ -1196,7 +1273,31 @@ impl Window {
             ActiveTool::Eraser => CanvasTool::Erase,
             ActiveTool::Select => CanvasTool::Select,
             ActiveTool::Text => CanvasTool::Text,
+            ActiveTool::Hand => CanvasTool::Hand,
         };
+        let radial: Vec<RadialEntry> = s
+            .radial_items
+            .iter()
+            .map(|item| {
+                let look = match *item {
+                    RadialItem::Slot(i) => match s.pens.get(i) {
+                        Some(p) if p.tool == Tool::Highlighter => EntryLook::Highlighter(p.color),
+                        Some(p) => EntryLook::Pen(p.color),
+                        None => EntryLook::Icon("action-unavailable-symbolic"),
+                    },
+                    RadialItem::Eraser => EntryLook::Eraser,
+                    RadialItem::Select => EntryLook::Select,
+                    RadialItem::Hand => EntryLook::Hand,
+                    other => EntryLook::Icon(other.icon_name().unwrap_or("")),
+                };
+                // A slot that no longer exists acts as empty.
+                let item = match *item {
+                    RadialItem::Slot(i) if i >= s.pens.len() => RadialItem::None,
+                    other => other,
+                };
+                RadialEntry { item, look }
+            })
+            .collect();
         // The pen to draw with: the selected slot, or the first one when
         // another tool is active (used by inputs mapped to Draw).
         let pen = match s.active_tool {
@@ -1221,29 +1322,42 @@ impl Window {
             c.eraser_end = s.pen_eraser;
             c.text_size = s.text_size;
             c.text_font = s.text_font.clone();
+            c.radial = radial;
+            c.long_press = s.long_press_ms.map(|ms| Duration::from_millis(ms as u64));
+            c.shape_hold = s.shape_hold_ms.map(|ms| Duration::from_millis(ms as u64));
         });
     }
 
     fn preferences(self: &Rc<Self>) {
-        let current = {
+        let (current, pens) = {
             let s = &self.state.borrow().settings;
-            Prefs {
-                smoothing: s.smoothing,
-                button_2: s.pen_button_2,
-                button_3: s.pen_button_3,
-                eraser: s.pen_eraser,
-            }
+            (
+                Prefs {
+                    smoothing: s.smoothing,
+                    button_2: s.pen_button_2,
+                    button_3: s.pen_button_3,
+                    eraser: s.pen_eraser,
+                    long_press_ms: s.long_press_ms,
+                    shape_hold_ms: s.shape_hold_ms,
+                    radial_items: s.radial_items.clone(),
+                },
+                s.pens.clone(),
+            )
         };
         let weak = self.weak();
-        preferences::show(&self.window, current, move |p| {
+        preferences::show(&self.window, current, &pens, move |p| {
             let this = upgrade!(weak);
             {
                 let mut st = this.state.borrow_mut();
-                st.settings.smoothing = p.smoothing;
-                st.settings.pen_button_2 = p.button_2;
-                st.settings.pen_button_3 = p.button_3;
-                st.settings.pen_eraser = p.eraser;
-                st.settings.save();
+                let s = &mut st.settings;
+                s.smoothing = p.smoothing;
+                s.pen_button_2 = p.button_2;
+                s.pen_button_3 = p.button_3;
+                s.pen_eraser = p.eraser;
+                s.long_press_ms = p.long_press_ms;
+                s.shape_hold_ms = p.shape_hold_ms;
+                s.radial_items = p.radial_items.clone();
+                s.save();
             }
             this.apply_tools();
         });

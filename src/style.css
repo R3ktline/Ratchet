@@ -42,3 +42,17 @@ button.temp-tool {
   padding: 0;
   min-height: 0;
 }
+
+/* Radial menu editor. */
+button.rt-spot {
+  padding: 0;
+}
+/* A newly added or replaced item pops in. */
+@keyframes rt-pop {
+  from { transform: scale(0.2); opacity: 0; }
+  60% { transform: scale(1.18); opacity: 1; }
+  to { transform: scale(1); opacity: 1; }
+}
+button.rt-pop {
+  animation: rt-pop 260ms ease-out;
+}

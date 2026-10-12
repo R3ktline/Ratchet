@@ -1,12 +1,15 @@
 mod canvas;
 mod debug;
+mod glyphs;
 mod ink;
 mod library;
 mod math;
 mod naming;
 mod page_menu;
 mod preferences;
+mod radial_editor;
 mod settings;
+mod shapes;
 mod text;
 mod toolbar;
 mod window;

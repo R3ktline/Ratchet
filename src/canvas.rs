@@ -17,6 +17,7 @@ use gtk::{gdk, glib, graphene, gsk};
 
 use crate::ink::{self, InkColor, Point, Smoother, Stroke, Strokes, Tool};
 use crate::library::{Background, PageFile, PageLayout, PageSize};
+use crate::shapes::{self, ShapeKind};
 use crate::text::{self, Run, Style, TextBox, TextSize};
 
 /// Text boxes on a page, shared cheaply between undo snapshots.
@@ -45,7 +46,7 @@ struct Editor {
     /// Style for newly typed text.
     pending: Rc<Cell<Style>>,
 }
-use crate::settings::{ButtonAction, EraserMode};
+use crate::settings::{ButtonAction, EraserMode, RadialItem};
 
 /// Eraser radii in screen pixels (the same size at any zoom).
 const STROKE_ERASER_RADIUS: f32 = 4.0;
@@ -74,6 +75,7 @@ pub enum CanvasTool {
     Erase,
     Select,
     Text,
+    Hand,
 }
 
 /// What a single pointer-down gesture is doing. Also reported while a
@@ -84,9 +86,55 @@ pub enum Action {
     Erase,
     Select,
     Text,
+    /// Picking from the radial menu.
+    Menu,
     Pan,
     Ignore,
 }
+
+/// How a radial menu entry looks.
+#[derive(Clone, Debug)]
+pub enum EntryLook {
+    Pen(InkColor),
+    Highlighter(InkColor),
+    Eraser,
+    Select,
+    Hand,
+    Icon(&'static str),
+}
+
+#[derive(Clone, Debug)]
+pub struct RadialEntry {
+    pub item: RadialItem,
+    pub look: EntryLook,
+}
+
+struct Radial {
+    center: (f32, f32),
+    hover: Option<usize>,
+}
+
+struct LongPress {
+    start: (f32, f32),
+    began: Instant,
+    timer: Option<glib::SourceId>,
+    tick: Option<gtk::TickCallbackId>,
+}
+
+const RADIAL_ITEM: f32 = 23.0;
+
+/// Ring geometry for `n` items: (outer radius, radius of the item circle).
+/// The ring grows when items wouldn't fit around the default size.
+fn radial_geometry(n: usize) -> (f32, f32) {
+    let spacing = 2.0 * RADIAL_ITEM + 8.0;
+    let items = (72.0f32).max(n as f32 * spacing / std::f32::consts::TAU);
+    (items + RADIAL_ITEM + 13.0, items)
+}
+const RADIAL_CENTER: f32 = 28.0;
+/// Pointer movement (screen px) that cancels a long press.
+const LONG_PRESS_SLOP: f32 = 6.0;
+/// The long-press ring only shows after this, so quick strokes don't flash it.
+const LONG_PRESS_RING_DELAY: Duration = Duration::from_millis(250);
 
 /// Pen-pan movement (screen px) that breaks the vertical rail.
 const RAIL_BREAK: f32 = 113.0;
@@ -120,7 +168,15 @@ struct Live {
     smoother: Smoother,
     last_raw: Point,
     raw: Vec<Point>,
+    /// Set once the stroke snapped to a shape (pen held still at the end).
+    shape: Option<ShapeKind>,
+    /// Screen position where the pen last started holding still.
+    hold_from: (f32, f32),
 }
+
+/// Pen movement (screen px) still counted as "holding still" for shapes;
+/// generous, since hands tremble.
+const SHAPE_HOLD_SLOP: f32 = 9.0;
 
 struct Erasing {
     before: Strokes,
@@ -246,6 +302,11 @@ pub struct Config {
     pub eraser_end: ButtonAction,
     pub text_size: TextSize,
     pub text_font: Option<String>,
+    pub radial: Vec<RadialEntry>,
+    pub long_press: Option<Duration>,
+    /// Holding the pen still this long at the end of a stroke snaps it to
+    /// a shape (None = off).
+    pub shape_hold: Option<Duration>,
 }
 
 /// Debug tools, only reachable with `RATCHET_DEBUG=1`.
@@ -284,6 +345,7 @@ type ErrorFn = Box<dyn Fn(String)>;
 type ZoomFn = Box<dyn Fn(f32)>;
 type LogFn = Box<dyn Fn(String)>;
 type TempToolFn = Box<dyn Fn(Option<Action>)>;
+type MenuFn = Box<dyn Fn(RadialItem)>;
 
 mod imp {
     use super::*;
@@ -326,6 +388,12 @@ mod imp {
         pub(super) on_zoom: RefCell<Option<ZoomFn>>,
         pub(super) on_log: RefCell<Option<LogFn>>,
         pub(super) on_temp_tool: RefCell<Option<TempToolFn>>,
+        pub(super) on_menu: RefCell<Option<MenuFn>>,
+        pub(super) radial: RefCell<Option<Radial>>,
+        pub(super) radial_open: Cell<f64>,
+        pub(super) radial_anim: RefCell<Option<adw::Animation>>,
+        pub(super) long_press: RefCell<Option<LongPress>>,
+        pub(super) shape_timer: RefCell<Option<glib::SourceId>>,
         pub(super) selection: RefCell<Strokes>,
         pub(super) sel_op: RefCell<Option<SelOp>>,
         pub(super) clipboard: RefCell<Vec<Stroke>>,
@@ -373,6 +441,9 @@ mod imp {
                     eraser_end: ButtonAction::Eraser,
                     text_size: TextSize::default(),
                     text_font: None,
+                    radial: Vec::new(),
+                    long_press: Some(Duration::from_millis(720)),
+                    shape_hold: Some(Duration::from_millis(500)),
                 }),
                 debug: RefCell::default(),
                 on_history: RefCell::default(),
@@ -380,6 +451,12 @@ mod imp {
                 on_zoom: RefCell::default(),
                 on_log: RefCell::default(),
                 on_temp_tool: RefCell::default(),
+                on_menu: RefCell::default(),
+                radial: RefCell::default(),
+                radial_open: Cell::new(0.0),
+                radial_anim: RefCell::default(),
+                long_press: RefCell::default(),
+                shape_timer: RefCell::default(),
                 selection: RefCell::default(),
                 sel_op: RefCell::default(),
                 clipboard: RefCell::default(),
@@ -672,6 +749,8 @@ impl Canvas {
             let grey = if dark { (0.8, 0.8, 0.8) } else { (0.35, 0.35, 0.35) };
             snapshot.append_stroke(&builder.to_path(), &gsk::Stroke::new(1.0), &rgba(grey, 0.9));
         }
+        self.draw_long_press(snapshot);
+        self.draw_radial(snapshot);
         self.draw_debug_overlay(snapshot);
     }
 
@@ -1117,6 +1196,7 @@ impl Canvas {
     fn reset_cursor(&self) {
         let name = match self.imp().config.borrow().tool {
             CanvasTool::Text => "text",
+            CanvasTool::Hand => "grab",
             _ => "crosshair",
         };
         self.set_cursor_from_name(Some(name));
@@ -1388,6 +1468,9 @@ impl Canvas {
         motion.connect_motion(move |c, x, y| {
             let Some(canvas) = weak.upgrade() else { return };
             canvas.imp().pointer.set((x as f32, y as f32));
+            if canvas.menu_open() {
+                canvas.radial_hover(x as f32, y as f32);
+            }
             if canvas.imp().debug.borrow().flags.input {
                 canvas.debug_event_state(c.current_event_state(), c.current_event());
                 canvas.queue_debug_draw();
@@ -1409,13 +1492,28 @@ impl Canvas {
             let Some(button) = event.downcast_ref::<gdk::ButtonEvent>().map(|b| b.button()) else {
                 return glib::Propagation::Proceed;
             };
-            if button == gdk::BUTTON_PRIMARY || canvas.imp().action.get() == Action::Ignore {
+            if button == gdk::BUTTON_PRIMARY {
+                return glib::Propagation::Proceed;
+            }
+            let pressed = event.event_type() == gdk::EventType::ButtonPress;
+            if canvas.imp().action.get() == Action::Ignore {
+                // Hovering: a button mapped to the menu opens it at the pen;
+                // releasing it over an item picks that item (released on the
+                // center, the menu stays open for picking by touch).
+                if canvas.button_opens_menu(button) {
+                    if pressed && !canvas.menu_open() {
+                        let (x, y) = canvas.imp().pointer.get();
+                        canvas.log(format!("button {button}: radial menu"));
+                        canvas.open_radial(x, y);
+                    } else if !pressed && canvas.menu_hover().is_some() {
+                        canvas.pick_radial();
+                    }
+                }
                 return glib::Propagation::Proceed;
             }
             // Last pen position on the canvas (surface coordinates in the
             // event may be offset by window decorations).
             let (x, y) = canvas.imp().pointer.get();
-            let pressed = event.event_type() == gdk::EventType::ButtonPress;
             canvas.side_button_mid_gesture(button, pressed, x, y);
             glib::Propagation::Proceed
         });
@@ -1429,6 +1527,9 @@ impl Canvas {
             let Some(canvas) = weak.upgrade() else { return glib::Propagation::Proceed };
             let ctrl = state.contains(gdk::ModifierType::CONTROL_MASK);
             match (ctrl, key.to_lower()) {
+                (false, gdk::Key::Escape) if canvas.menu_open() => {
+                    canvas.close_radial();
+                }
                 (false, gdk::Key::Delete | gdk::Key::BackSpace) if canvas.has_selection() => canvas.delete_selection(),
                 (false, gdk::Key::Escape) if canvas.has_selection() => canvas.clear_selection(),
                 (true, gdk::Key::c) => canvas.copy_selection(),
@@ -1502,6 +1603,7 @@ impl Canvas {
             CanvasTool::Erase => Action::Erase,
             CanvasTool::Select => Action::Select,
             CanvasTool::Text => Action::Text,
+            CanvasTool::Hand => Action::Pan,
         }
     }
 
@@ -1531,6 +1633,8 @@ impl Canvas {
             Some(ButtonAction::Pan) => Action::Pan,
             Some(ButtonAction::Select) => Action::Select,
             Some(ButtonAction::Draw) => Action::Draw,
+            // The menu opens on the button press while hovering.
+            Some(ButtonAction::Menu) => Action::Ignore,
             Some(ButtonAction::Click) | None => self.main_action(),
         };
         let is_eraser_end = g.device_tool().is_some_and(|t| t.tool_type() == gdk::DeviceToolType::Eraser);
@@ -1553,7 +1657,7 @@ impl Canvas {
             ButtonAction::Pan => Action::Pan,
             ButtonAction::Select => Action::Select,
             ButtonAction::Draw => Action::Draw,
-            ButtonAction::Click => return,
+            ButtonAction::Menu | ButtonAction::Click => return,
         };
         let current = imp.action.get();
         let p = imp.live.borrow().as_ref().map_or(0.5, |l| l.last_raw.p);
@@ -1603,12 +1707,16 @@ impl Canvas {
 
     fn cancel_input(&self) {
         let imp = self.imp();
+        if let Some(t) = imp.shape_timer.take() {
+            t.remove();
+        }
         imp.live.take();
         imp.erasing.take();
         imp.panning.take();
         imp.sel_op.take();
         imp.eraser_at.set(None);
         imp.action.set(Action::Ignore);
+        self.cancel_long_press();
         self.set_temp_tool(None);
     }
 
@@ -1617,6 +1725,12 @@ impl Canvas {
     fn begin(&self, action: Action, x: f32, y: f32, p: f32, pen: bool) {
         let imp = self.imp();
         self.cancel_input();
+        // With the radial menu open, any touch picks from it.
+        if self.menu_open() {
+            imp.action.set(Action::Menu);
+            self.radial_hover(x, y);
+            return;
+        }
         if imp.path.borrow().is_none() {
             return;
         }
@@ -1650,7 +1764,9 @@ impl Canvas {
                 // String length is in screen mm, so it feels the same at any zoom.
                 let mut smoother = Smoother::new(radius_mm * ink::PX_PER_MM / self.zoom());
                 smoother.push(raw);
-                *imp.live.borrow_mut() = Some(Live { stroke, smoother, last_raw: raw, raw: vec![raw] });
+                *imp.live.borrow_mut() =
+                    Some(Live { stroke, smoother, last_raw: raw, raw: vec![raw], shape: None, hold_from: (x, y) });
+                self.restart_shape_timer();
             }
             Action::Erase => {
                 let before = imp.strokes.borrow().clone();
@@ -1659,6 +1775,7 @@ impl Canvas {
             }
             Action::Select => self.begin_select(x, y),
             Action::Text => imp.text_press.set(Some((x, y))),
+            Action::Menu => {}
             Action::Pan => {
                 *imp.panning.borrow_mut() =
                     Some(Panning { start: (x, y), view: imp.view.get(), rail: pen, decided: false });
@@ -1666,11 +1783,15 @@ impl Canvas {
             }
             Action::Ignore => {}
         }
+        if action != Action::Ignore {
+            self.start_long_press(x, y);
+        }
         self.queue_draw();
     }
 
     fn extend(&self, x: f32, y: f32, p: f32) {
         let imp = self.imp();
+        self.check_long_press(x, y);
         match imp.action.get() {
             Action::Draw => {
                 let (px, py) = self.to_page(x, y);
@@ -1679,13 +1800,42 @@ impl Canvas {
                 let raw = Point { x: px, y: py, p };
                 live.last_raw = raw;
                 live.raw.push(raw);
-                if let Some(smoothed) = live.smoother.push(raw) {
-                    ink::push_point(&mut live.stroke.points, smoothed);
+                match live.shape {
+                    // A snapped line/arrow keeps following the pen (still
+                    // snapping to 15° steps); circles stay put.
+                    Some(kind @ (ShapeKind::Line | ShapeKind::Arrow)) => {
+                        let first = live.stroke.points[0];
+                        let start = (first.x, first.y);
+                        let end = shapes::snap_angle(start, (px, py));
+                        live.stroke.points = match kind {
+                            ShapeKind::Arrow => shapes::arrow_points(start, end, first.p),
+                            _ => shapes::line_points(start, end, first.p),
+                        };
+                    }
+                    // A snapped circle keeps its center; its edge follows
+                    // the pen, so it can be resized before lifting.
+                    Some(ShapeKind::Circle) => {
+                        let p = live.stroke.points[0].p;
+                        let center = shapes::circle_center(&live.stroke.points);
+                        let r = ((px - center.0).powi(2) + (py - center.1).powi(2)).sqrt().max(1.0);
+                        live.stroke.points = shapes::circle_points(center, r, p);
+                    }
+                    None => {
+                        if let Some(smoothed) = live.smoother.push(raw) {
+                            ink::push_point(&mut live.stroke.points, smoothed);
+                        }
+                        let (hx, hy) = live.hold_from;
+                        if ((x - hx).powi(2) + (y - hy).powi(2)).sqrt() > SHAPE_HOLD_SLOP {
+                            live.hold_from = (x, y);
+                            self.restart_shape_timer();
+                        }
+                    }
                 }
             }
             Action::Erase => self.erase_to(x, y),
             Action::Select => self.extend_select(x, y),
             Action::Text => {}
+            Action::Menu => self.radial_hover(x, y),
             Action::Pan => {
                 let mut panning = imp.panning.borrow_mut();
                 let Some(pan) = panning.as_mut() else { return };
@@ -1715,17 +1865,23 @@ impl Canvas {
     fn end(&self, x: f32, y: f32) {
         let imp = self.imp();
         let action = imp.action.replace(Action::Ignore);
+        self.cancel_long_press();
         self.set_temp_tool(None);
         match action {
             Action::Draw => {
                 let Some(mut live) = imp.live.take() else { return };
-                // Finish exactly where the pen lifted, not where the
-                // stabilized line had caught up to.
-                let (px, py) = self.to_page(x, y);
-                let last = Point { x: px, y: py, p: live.last_raw.p };
-                ink::push_point(&mut live.stroke.points, last);
+                if let Some(t) = imp.shape_timer.take() {
+                    t.remove();
+                }
                 let passes = imp.config.borrow().smooth_passes;
-                live.stroke.points = ink::smooth_points(&live.stroke.points, passes);
+                if live.shape.is_none() {
+                    // Finish exactly where the pen lifted, not where the
+                    // stabilized line had caught up to.
+                    let (px, py) = self.to_page(x, y);
+                    let last = Point { x: px, y: py, p: live.last_raw.p };
+                    ink::push_point(&mut live.stroke.points, last);
+                    live.stroke.points = ink::smooth_points(&live.stroke.points, passes);
+                }
                 live.stroke.update_bounds();
                 self.log(format!(
                     "stroke: {} raw samples -> {} points ({passes} smoothing passes)",
@@ -1762,11 +1918,52 @@ impl Canvas {
             }
             Action::Select => self.end_select(x, y),
             Action::Text => self.text_tool_click(x, y),
+            Action::Menu => {
+                // Lifting the tip picks; on the center it just closes.
+                self.radial_hover(x, y);
+                self.pick_radial();
+            }
             Action::Pan => {
                 imp.panning.take();
                 self.reset_cursor();
             }
             Action::Ignore => {}
+        }
+    }
+
+    /// (Re)start the "held still" timer for shape snapping.
+    fn restart_shape_timer(&self) {
+        let imp = self.imp();
+        if let Some(t) = imp.shape_timer.take() {
+            t.remove();
+        }
+        let Some(hold) = imp.config.borrow().shape_hold else { return };
+        let weak = self.downgrade();
+        let id = glib::timeout_add_local_once(hold, move || {
+            if let Some(canvas) = weak.upgrade() {
+                canvas.imp().shape_timer.take();
+                canvas.snap_live_shape();
+            }
+        });
+        *imp.shape_timer.borrow_mut() = Some(id);
+    }
+
+    /// The pen was held still: replace the live stroke with the shape it
+    /// looks like, if any.
+    fn snap_live_shape(&self) {
+        let imp = self.imp();
+        let zoom = self.zoom();
+        let mut live = imp.live.borrow_mut();
+        let Some(live) = live.as_mut().filter(|l| l.shape.is_none()) else { return };
+        // Include the pen's current position (the stabilizer lags).
+        let mut points = live.stroke.points.clone();
+        ink::push_point(&mut points, live.last_raw);
+        if let Some(shape) = shapes::recognize(&points, 3.0 / zoom) {
+            let kind = shape.kind;
+            live.stroke.points = shape.points;
+            live.shape = Some(kind);
+            self.log(format!("shape: {kind:?}"));
+            self.queue_draw();
         }
     }
 
@@ -2122,6 +2319,319 @@ impl Canvas {
         drop(strokes);
         drop(erasing);
         imp.cache.take();
+    }
+}
+
+// ---- radial menu -------------------------------------------------------------------
+
+impl Canvas {
+    pub fn connect_menu(&self, f: impl Fn(RadialItem) + 'static) {
+        *self.imp().on_menu.borrow_mut() = Some(Box::new(f));
+    }
+
+    pub fn menu_open(&self) -> bool {
+        self.imp().radial.borrow().is_some()
+    }
+
+    fn menu_hover(&self) -> Option<usize> {
+        self.imp().radial.borrow().as_ref().and_then(|r| r.hover)
+    }
+
+    /// Close the menu and run the item under the pointer, if any.
+    fn pick_radial(&self) {
+        if let Some(item) = self.close_radial() {
+            self.log(format!("menu: {item:?}"));
+            if let Some(f) = self.imp().on_menu.borrow().as_ref() {
+                f(item);
+            }
+        }
+    }
+
+    fn button_opens_menu(&self, button: u32) -> bool {
+        let c = self.imp().config.borrow();
+        match button {
+            2 => c.button_2 == ButtonAction::Menu,
+            3 => c.button_3 == ButtonAction::Menu,
+            _ => false,
+        }
+    }
+
+    /// Open the menu around screen (x, y), nudged to fit in the canvas.
+    fn open_radial(&self, x: f32, y: f32) {
+        let imp = self.imp();
+        let (w, h) = (self.width() as f32, self.height() as f32);
+        let (outer, _) = radial_geometry(imp.config.borrow().radial.len());
+        let fit = |v: f32, max: f32| v.clamp(outer.min(max / 2.0), (max - outer).max(max / 2.0));
+        *imp.radial.borrow_mut() = Some(Radial { center: (fit(x, w), fit(y, h)), hover: None });
+        self.animate_radial(0.0, 1.0);
+        self.grab_focus();
+    }
+
+    /// Close the menu; returns the item under the pointer, if any.
+    fn close_radial(&self) -> Option<RadialItem> {
+        let imp = self.imp();
+        let radial = imp.radial.take()?;
+        imp.radial_anim.take();
+        imp.radial_open.set(0.0);
+        self.queue_draw();
+        let entries = &imp.config.borrow().radial;
+        radial.hover.and_then(|i| entries.get(i)).map(|e| e.item).filter(|i| *i != RadialItem::None)
+    }
+
+    fn animate_radial(&self, from: f64, to: f64) {
+        let weak = self.downgrade();
+        let target = adw::CallbackAnimationTarget::new(move |v| {
+            if let Some(canvas) = weak.upgrade() {
+                canvas.imp().radial_open.set(v);
+                canvas.queue_draw();
+            }
+        });
+        let anim = adw::TimedAnimation::new(self, from, to, 140, target);
+        anim.set_easing(adw::Easing::EaseOutBack);
+        anim.play();
+        *self.imp().radial_anim.borrow_mut() = Some(anim.upcast());
+    }
+
+    /// Which entry the pointer points at: by direction from the center, so
+    /// a short flick is enough. Nothing within the center circle.
+    fn radial_hover(&self, x: f32, y: f32) {
+        let imp = self.imp();
+        let count = imp.config.borrow().radial.len();
+        let mut radial = imp.radial.borrow_mut();
+        let Some(r) = radial.as_mut() else { return };
+        let (dx, dy) = (x - r.center.0, y - r.center.1);
+        let hover = if count == 0 || (dx * dx + dy * dy).sqrt() < RADIAL_CENTER {
+            None
+        } else {
+            let angle = dx.atan2(-dy).rem_euclid(std::f32::consts::TAU);
+            let step = std::f32::consts::TAU / count as f32;
+            let i = ((angle / step).round() as usize) % count;
+            let empty = imp.config.borrow().radial[i].item == RadialItem::None;
+            (!empty).then_some(i)
+        };
+        if r.hover != hover {
+            r.hover = hover;
+            drop(radial);
+            self.queue_draw();
+        }
+    }
+
+    // ---- long press -------------------------------------------------------------
+
+    fn start_long_press(&self, x: f32, y: f32) {
+        let imp = self.imp();
+        self.cancel_long_press();
+        let Some(delay) = imp.config.borrow().long_press else { return };
+        let weak = self.downgrade();
+        let timer = glib::timeout_add_local_once(delay, move || {
+            if let Some(canvas) = weak.upgrade() {
+                if let Some(lp) = canvas.imp().long_press.borrow_mut().as_mut() {
+                    lp.timer = None;
+                }
+                canvas.long_press_fired();
+            }
+        });
+        // Redraw every frame while waiting, for the filling ring.
+        let tick = self.add_tick_callback(|canvas, _| {
+            canvas.queue_draw();
+            glib::ControlFlow::Continue
+        });
+        *imp.long_press.borrow_mut() =
+            Some(LongPress { start: (x, y), began: Instant::now(), timer: Some(timer), tick: Some(tick) });
+    }
+
+    fn check_long_press(&self, x: f32, y: f32) {
+        let moved = self.imp().long_press.borrow().as_ref().is_some_and(|lp| {
+            let (dx, dy) = (x - lp.start.0, y - lp.start.1);
+            (dx * dx + dy * dy).sqrt() > LONG_PRESS_SLOP
+        });
+        if moved {
+            self.cancel_long_press();
+        }
+    }
+
+    fn cancel_long_press(&self) {
+        if let Some(lp) = self.imp().long_press.take() {
+            if let Some(t) = lp.timer {
+                t.remove();
+            }
+            if let Some(t) = lp.tick {
+                t.remove();
+            }
+            self.queue_draw();
+        }
+    }
+
+    /// Held still long enough: drop what the touch started (a dot, an
+    /// erase, a lasso…) and open the menu there; lifting picks.
+    fn long_press_fired(&self) {
+        let imp = self.imp();
+        let Some(lp) = imp.long_press.take() else { return };
+        if let Some(t) = lp.tick {
+            t.remove();
+        }
+        if let Some(e) = imp.erasing.take() {
+            *imp.strokes.borrow_mut() = e.before;
+            imp.cache.take();
+        }
+        imp.live.take();
+        imp.sel_op.take();
+        imp.panning.take();
+        imp.text_press.take();
+        imp.eraser_at.set(None);
+        self.set_temp_tool(None);
+        self.reset_cursor();
+        self.log("long press: radial menu".into());
+        self.open_radial(lp.start.0, lp.start.1);
+        imp.action.set(Action::Menu);
+    }
+
+    fn draw_long_press(&self, snapshot: &gtk::Snapshot) {
+        let imp = self.imp();
+        let Some(delay) = imp.config.borrow().long_press else { return };
+        let lp = imp.long_press.borrow();
+        let Some(lp) = lp.as_ref() else { return };
+        let elapsed = lp.began.elapsed();
+        if elapsed < LONG_PRESS_RING_DELAY {
+            return;
+        }
+        let t = ((elapsed - LONG_PRESS_RING_DELAY).as_secs_f32()
+            / (delay.saturating_sub(LONG_PRESS_RING_DELAY)).as_secs_f32().max(0.01))
+        .min(1.0);
+        let accent = adw::StyleManager::default().accent_color_rgba();
+        let b = gsk::PathBuilder::new();
+        let (cx, cy, r) = (lp.start.0, lp.start.1, 18.0);
+        b.move_to(cx, cy - r);
+        // Arc as short segments (clockwise from the top).
+        let steps = (48.0 * t).ceil().max(1.0) as usize;
+        for k in 1..=steps {
+            let a = k as f32 / steps as f32 * t * std::f32::consts::TAU;
+            b.line_to(cx + r * a.sin(), cy - r * a.cos());
+        }
+        let stroke = gsk::Stroke::new(3.0);
+        stroke.set_line_cap(gsk::LineCap::Round);
+        snapshot.append_stroke(&b.to_path(), &stroke, &accent);
+    }
+
+    fn draw_radial(&self, snapshot: &gtk::Snapshot) {
+        let imp = self.imp();
+        let radial = imp.radial.borrow();
+        let Some(r) = radial.as_ref() else { return };
+        let open = imp.radial_open.get() as f32;
+        let dark = adw::StyleManager::default().is_dark();
+        let bg = if dark { rgba((0.18, 0.18, 0.2), 0.97) } else { rgba((0.99, 0.99, 0.99), 0.97) };
+        let fg = if dark { rgba((0.95, 0.95, 0.95), 1.0) } else { rgba((0.12, 0.12, 0.13), 1.0) };
+        let accent = adw::StyleManager::default().accent_color_rgba();
+        let circle = |cx: f32, cy: f32, rad: f32| gsk::RoundedRect::from_rect(rect(cx - rad, cy - rad, 2.0 * rad, 2.0 * rad), rad);
+
+        snapshot.save();
+        snapshot.translate(&graphene::Point::new(r.center.0, r.center.1));
+        snapshot.scale(0.6 + 0.4 * open, 0.6 + 0.4 * open);
+        snapshot.push_opacity(open.clamp(0.0, 1.0) as f64);
+
+        let (outer, ring) = radial_geometry(imp.config.borrow().radial.len());
+        let disc = circle(0.0, 0.0, outer);
+        snapshot.append_outset_shadow(&disc, &rgba((0.0, 0.0, 0.0), 0.3), 0.0, 3.0, 0.0, 12.0);
+        snapshot.push_rounded_clip(&disc);
+        snapshot.append_color(&bg, &rect(-outer, -outer, 2.0 * outer, 2.0 * outer));
+        snapshot.pop();
+
+        // Center: "close" mark.
+        let center = circle(0.0, 0.0, RADIAL_CENTER);
+        snapshot.push_rounded_clip(&center);
+        let mut c = fg;
+        c.set_alpha(if r.hover.is_none() { 0.14 } else { 0.07 });
+        snapshot.append_color(&c, &rect(-RADIAL_CENTER, -RADIAL_CENTER, 2.0 * RADIAL_CENTER, 2.0 * RADIAL_CENTER));
+        snapshot.pop();
+        let x = gsk::PathBuilder::new();
+        x.move_to(-6.0, -6.0);
+        x.line_to(6.0, 6.0);
+        x.move_to(6.0, -6.0);
+        x.line_to(-6.0, 6.0);
+        let mut dim = fg;
+        dim.set_alpha(0.6);
+        snapshot.append_stroke(&x.to_path(), &gsk::Stroke::new(1.6), &dim);
+
+        let entries = imp.config.borrow().radial.clone();
+        let n = entries.len().max(1) as f32;
+        for (i, entry) in entries.iter().enumerate() {
+            if entry.item == RadialItem::None {
+                continue;
+            }
+            let a = i as f32 / n * std::f32::consts::TAU;
+            let (ix, iy) = (ring * a.sin(), -ring * a.cos());
+            let spot = circle(ix, iy, RADIAL_ITEM);
+            if r.hover == Some(i) {
+                snapshot.push_rounded_clip(&spot);
+                let mut h = accent;
+                h.set_alpha(0.3);
+                snapshot.append_color(&h, &rect(ix - RADIAL_ITEM, iy - RADIAL_ITEM, 2.0 * RADIAL_ITEM, 2.0 * RADIAL_ITEM));
+                snapshot.pop();
+            }
+            self.draw_entry_glyph(snapshot, &entry.look, ix, iy, &fg, dark);
+        }
+        snapshot.pop();
+        snapshot.restore();
+    }
+
+    fn draw_entry_glyph(&self, snapshot: &gtk::Snapshot, look: &EntryLook, x: f32, y: f32, fg: &gdk::RGBA, dark: bool) {
+        match look {
+            EntryLook::Pen(color) => {
+                let b = gsk::PathBuilder::new();
+                b.add_circle(&graphene::Point::new(x, y), 8.0);
+                snapshot.append_fill(&b.to_path(), gsk::FillRule::Winding, &rgba(color.resolve(dark), 1.0));
+            }
+            EntryLook::Highlighter(color) => {
+                snapshot.append_color(&rgba(color.resolve(dark), 0.8), &rect(x - 9.0, y - 5.0, 18.0, 10.0));
+            }
+            EntryLook::Eraser => {
+                snapshot.save();
+                snapshot.translate(&graphene::Point::new(x, y));
+                snapshot.rotate(-45.0);
+                let b = gsk::PathBuilder::new();
+                b.add_rect(&rect(-9.0, -5.0, 18.0, 10.0));
+                snapshot.append_stroke(&b.to_path(), &gsk::Stroke::new(1.5), fg);
+                snapshot.append_color(fg, &rect(-9.0, -5.0, 6.0, 10.0));
+                snapshot.restore();
+            }
+            EntryLook::Select => {
+                let b = gsk::PathBuilder::new();
+                b.add_circle(&graphene::Point::new(x, y), 8.0);
+                let s = gsk::Stroke::new(1.5);
+                s.set_dash(&[3.0, 2.0]);
+                snapshot.append_stroke(&b.to_path(), &s, fg);
+            }
+            EntryLook::Hand => {
+                let b = gsk::PathBuilder::new();
+                for (dx, dy) in [(0.0f32, -1.0f32), (1.0, 0.0), (0.0, 1.0), (-1.0, 0.0)] {
+                    let (tx, ty) = (x + dx * 9.0, y + dy * 9.0);
+                    b.move_to(x, y);
+                    b.line_to(tx, ty);
+                    // Arrow head.
+                    b.move_to(tx - dy * 3.0 - dx * 3.0, ty + dx * 3.0 - dy * 3.0);
+                    b.line_to(tx, ty);
+                    b.line_to(tx + dy * 3.0 - dx * 3.0, ty - dx * 3.0 - dy * 3.0);
+                }
+                let s = gsk::Stroke::new(1.6);
+                s.set_line_cap(gsk::LineCap::Round);
+                snapshot.append_stroke(&b.to_path(), &s, fg);
+            }
+            EntryLook::Icon(name) => {
+                let Some(display) = gdk::Display::default() else { return };
+                let icon = gtk::IconTheme::for_display(&display).lookup_icon(
+                    name,
+                    &[],
+                    16,
+                    self.scale_factor(),
+                    gtk::TextDirection::None,
+                    gtk::IconLookupFlags::empty(),
+                );
+                snapshot.save();
+                snapshot.translate(&graphene::Point::new(x - 8.0, y - 8.0));
+                icon.snapshot_symbolic(snapshot.upcast_ref::<gdk::Snapshot>(), 16.0, 16.0, &[*fg]);
+                snapshot.restore();
+            }
+        }
     }
 }
 
