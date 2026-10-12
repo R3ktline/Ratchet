@@ -21,6 +21,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::ink::Stroke;
+use crate::text::TextBox;
 use crate::naming::{Pattern, Today};
 
 const LIBRARY_META: &str = ".ratchet-library.json";
@@ -60,6 +62,8 @@ struct SectionMeta {
     version: u32,
     name: String,
     pattern: Pattern,
+    #[serde(default)]
+    page_layout: PageLayout,
     pages: Vec<PageRef>,
 }
 
@@ -69,13 +73,146 @@ pub struct PageRef {
     pub title: String,
 }
 
-/// Contents of a page file. Ink is added in phase 3.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PaperSize {
+    A3,
+    #[default]
+    A4,
+    A5,
+    Letter,
+    Legal,
+    Tabloid,
+    #[serde(rename = "slide-16x9")]
+    Slide16x9,
+    #[serde(rename = "slide-4x3")]
+    Slide4x3,
+    /// Portrait width and height in mm.
+    Custom { width_mm: f32, height_mm: f32 },
+}
+
+impl PaperSize {
+    pub const PRESETS: [PaperSize; 8] = [
+        PaperSize::A3,
+        PaperSize::A4,
+        PaperSize::A5,
+        PaperSize::Letter,
+        PaperSize::Legal,
+        PaperSize::Tabloid,
+        PaperSize::Slide16x9,
+        PaperSize::Slide4x3,
+    ];
+
+    /// Width and height in mm before applying landscape.
+    pub fn mm(self) -> (f32, f32) {
+        match self {
+            PaperSize::A3 => (297.0, 420.0),
+            PaperSize::A4 => (210.0, 297.0),
+            PaperSize::A5 => (148.0, 210.0),
+            PaperSize::Letter => (215.9, 279.4),
+            PaperSize::Legal => (215.9, 355.6),
+            PaperSize::Tabloid => (279.4, 431.8),
+            // Slides are screen-shaped, so their natural shape is wide.
+            PaperSize::Slide16x9 => (338.7, 190.5),
+            PaperSize::Slide4x3 => (254.0, 190.5),
+            PaperSize::Custom { width_mm, height_mm } => (width_mm, height_mm),
+        }
+    }
+
+    pub fn label(self) -> String {
+        match self {
+            PaperSize::A3 => "A3".into(),
+            PaperSize::A4 => "A4".into(),
+            PaperSize::A5 => "A5".into(),
+            PaperSize::Letter => "US Letter".into(),
+            PaperSize::Legal => "US Legal".into(),
+            PaperSize::Tabloid => "Tabloid".into(),
+            PaperSize::Slide16x9 => "Slide 16:9".into(),
+            PaperSize::Slide4x3 => "Slide 4:3".into(),
+            PaperSize::Custom { .. } => "Custom".into(),
+        }
+    }
+
+    /// Paper sizes turn to match the screen when a page is created;
+    /// slides and custom sizes keep the shape they were given.
+    pub fn follows_orientation(self) -> bool {
+        !matches!(self, PaperSize::Slide16x9 | PaperSize::Slide4x3 | PaperSize::Custom { .. })
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase", tag = "kind")]
+pub enum PageSize {
+    /// Grows right and down as you write.
+    #[default]
+    Infinite,
+    /// Stacked sheets of paper; a blank one is always kept at the end.
+    Sheets { paper: PaperSize, landscape: bool },
+}
+
+impl PageSize {
+    /// Sheet width and height in page units, if sheets.
+    pub fn sheet_px(self) -> Option<(f32, f32)> {
+        match self {
+            PageSize::Infinite => None,
+            PageSize::Sheets { paper, landscape } => {
+                let (w, h) = paper.mm();
+                let (w, h) = (w * crate::ink::PX_PER_MM, h * crate::ink::PX_PER_MM);
+                Some(if landscape { (h, w) } else { (w, h) })
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Background {
+    #[default]
+    Blank,
+    Lined,
+    Grid,
+    Dotted,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct PageLayout {
+    #[serde(default)]
+    pub size: PageSize,
+    #[serde(default)]
+    pub background: Background,
+}
+
+/// Contents of a page file.
 #[derive(Serialize, Deserialize)]
 pub struct PageFile {
     pub version: u32,
     pub title: String,
     pub created: String,
     pub modified: String,
+    #[serde(default)]
+    pub layout: PageLayout,
+    #[serde(default)]
+    pub strokes: Vec<Stroke>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub texts: Vec<TextBox>,
+    /// Fields from newer versions, preserved when rewriting the file.
+    #[serde(flatten)]
+    pub extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl PageFile {
+    pub fn load(path: &Path) -> io::Result<Self> {
+        let mut page: PageFile = serde_json::from_slice(&fs::read(path)?)?;
+        for s in &mut page.strokes {
+            s.update_bounds();
+        }
+        Ok(page)
+    }
+
+    pub fn save(&mut self, path: &Path) -> io::Result<()> {
+        self.modified = now_iso();
+        write_json(path, self)
+    }
 }
 
 #[derive(Debug)]
@@ -83,6 +220,8 @@ pub struct Section {
     pub dir: String,
     pub name: String,
     pub pattern: Pattern,
+    /// Layout for new pages in this section.
+    pub page_layout: PageLayout,
     pub pages: Vec<PageRef>,
 }
 
@@ -227,9 +366,9 @@ impl Library {
 
     fn load_section(path: &Path, dir: String) -> Section {
         let meta: Option<SectionMeta> = read_json(&path.join(SECTION_META));
-        let (name, pattern, refs) = match meta {
-            Some(m) => (m.name, m.pattern, m.pages),
-            None => (dir.clone(), default_pattern(&dir), Vec::new()),
+        let (name, pattern, page_layout, refs) = match meta {
+            Some(m) => (m.name, m.pattern, m.page_layout, m.pages),
+            None => (dir.clone(), default_pattern(&dir), PageLayout::default(), Vec::new()),
         };
         let files = sorted_entries(path, false);
         let order = reconcile(refs.iter().map(|r| r.file.clone()).collect(), &files);
@@ -247,7 +386,7 @@ impl Library {
                 }
             })
             .collect();
-        Section { dir, name, pattern, pages }
+        Section { dir, name, pattern, page_layout, pages }
     }
 
     // ---- paths -------------------------------------------------------------
@@ -291,6 +430,7 @@ impl Library {
             version: FORMAT_VERSION,
             name: s.name.clone(),
             pattern: s.pattern.clone(),
+            page_layout: s.page_layout,
             pages: s.pages.clone(),
         };
         write_json(&self.section_path(nb, sec).join(SECTION_META), &meta)
@@ -325,8 +465,13 @@ impl Library {
         let nb_path = self.notebook_path(nb);
         let dir = unique_name(&nb_path, &sanitize(name), None, None);
         fs::create_dir(nb_path.join(&dir))?;
-        let section =
-            Section { dir, name: name.to_string(), pattern: default_pattern(name), pages: Vec::new() };
+        let section = Section {
+            dir,
+            name: name.to_string(),
+            pattern: default_pattern(name),
+            page_layout: PageLayout::default(),
+            pages: Vec::new(),
+        };
         self.notebooks[nb].sections.push(section);
         let sec = self.notebooks[nb].sections.len() - 1;
         self.save_section_meta(nb, sec)?;
@@ -334,19 +479,42 @@ impl Library {
         Ok(sec)
     }
 
-    pub fn create_page(&mut self, nb: usize, sec: usize) -> io::Result<usize> {
+    /// Add a page using the section's default layout. `landscape` is the
+    /// screen orientation, which paper sizes follow.
+    pub fn create_page(&mut self, nb: usize, sec: usize, landscape: bool) -> io::Result<usize> {
         let section = &self.notebooks[nb].sections[sec];
         let title =
             section.pattern.next_title(section.pages.iter().map(|p| p.title.as_str()), Today::now());
         let sec_path = self.section_path(nb, sec);
         let file = unique_name(&sec_path, &sanitize(&title), Some(PAGE_EXT), None);
         let now = now_iso();
-        let page =
-            PageFile { version: FORMAT_VERSION, title: title.clone(), created: now.clone(), modified: now };
+        let page = PageFile {
+            version: FORMAT_VERSION,
+            title: title.clone(),
+            created: now.clone(),
+            modified: now,
+            layout: {
+                let mut layout = self.notebooks[nb].sections[sec].page_layout;
+                if let PageSize::Sheets { paper, .. } = layout.size
+                    && paper.follows_orientation()
+                {
+                    layout.size = PageSize::Sheets { paper, landscape };
+                }
+                layout
+            },
+            strokes: Vec::new(),
+            texts: Vec::new(),
+            extra: Default::default(),
+        };
         write_json(&sec_path.join(&file), &page)?;
         self.notebooks[nb].sections[sec].pages.push(PageRef { file, title });
         self.save_section_meta(nb, sec)?;
         Ok(self.notebooks[nb].sections[sec].pages.len() - 1)
+    }
+
+    pub fn set_section_layout(&mut self, nb: usize, sec: usize, layout: PageLayout) -> io::Result<()> {
+        self.notebooks[nb].sections[sec].page_layout = layout;
+        self.save_section_meta(nb, sec)
     }
 
     // ---- rename ----------------------------------------------------------------
@@ -543,6 +711,24 @@ mod tests {
     }
 
     #[test]
+    fn new_pages_follow_orientation() {
+        let root = temp_root("orient");
+        let mut lib = Library::load(&root).unwrap();
+        let nb = lib.create_notebook("N").unwrap();
+        let a4 = PageLayout { size: PageSize::Sheets { paper: PaperSize::A4, landscape: false }, ..Default::default() };
+        lib.set_section_layout(nb, 0, a4).unwrap();
+        let p = lib.create_page(nb, 0, true).unwrap();
+        let page = PageFile::load(&lib.page_path(nb, 0, p)).unwrap();
+        assert_eq!(page.layout.size, PageSize::Sheets { paper: PaperSize::A4, landscape: true });
+        // Custom sizes keep their shape; layouts round-trip through JSON.
+        let custom = PageSize::Sheets { paper: PaperSize::Custom { width_mm: 100.0, height_mm: 50.0 }, landscape: false };
+        lib.set_section_layout(nb, 0, PageLayout { size: custom, ..Default::default() }).unwrap();
+        let p = lib.create_page(nb, 0, false).unwrap();
+        assert_eq!(PageFile::load(&lib.page_path(nb, 0, p)).unwrap().layout.size, custom);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn sanitize_names() {
         assert_eq!(sanitize("Calc: II / Analysis?"), "Calc- II - Analysis-");
         assert_eq!(sanitize("  ..hidden.  "), "hidden");
@@ -561,15 +747,15 @@ mod tests {
         lib.create_section(calc, "Laboratory").unwrap();
         lib.create_section(phys, "Laboratory").unwrap();
 
-        lib.create_page(calc, 0).unwrap();
-        lib.create_page(calc, 0).unwrap();
+        lib.create_page(calc, 0, false).unwrap();
+        lib.create_page(calc, 0, false).unwrap();
         let titles: Vec<_> = lib.notebooks[calc].sections[0].pages.iter().map(|p| &p.title).collect();
         assert_eq!(titles, ["Lecture 1", "Lecture 2"]);
-        lib.create_page(calc, 2).unwrap();
+        lib.create_page(calc, 2, false).unwrap();
         assert_eq!(lib.notebooks[calc].sections[2].pages[0].title, "Lab 1");
 
         lib.rename_page(calc, 0, 1, "Week 9: limits").unwrap();
-        lib.create_page(calc, 0).unwrap();
+        lib.create_page(calc, 0, false).unwrap();
         assert_eq!(lib.notebooks[calc].sections[0].pages[2].title, "Week 10: limits");
         assert!(lib.page_path(calc, 0, 1).ends_with("Week 9- limits.json"));
 

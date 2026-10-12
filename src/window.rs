@@ -4,12 +4,21 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
+use std::time::Duration;
 
 use adw::prelude::*;
 use gtk::{gdk, gio, glib};
 
+use crate::canvas::{Brush, Canvas, CanvasTool, DebugFlags};
+use crate::debug::{self, LogWindow};
+use crate::ink::PX_PER_MM;
 use crate::library::{Detached, Library, Target};
-use crate::settings::{Settings, Theme};
+use crate::page_menu;
+use crate::preferences::{self, Prefs};
+use crate::settings::{ActiveTool, Settings, Theme};
+use crate::toolbar::{self, ToolState, Toolbar};
+
+const SIDEBAR_ANIMATION_MS: u32 = 160;
 
 /// Runs after an inline rename finishes.
 type AfterRename = Box<dyn FnOnce(&Rc<Window>)>;
@@ -52,7 +61,14 @@ pub struct Window {
     toasts: adw::ToastOverlay,
     title: adw::WindowTitle,
     stack: gtk::Stack,
-    page_status: adw::StatusPage,
+    canvas: Canvas,
+    toolbar: Rc<Toolbar>,
+    /// Header slot for the toolbar.
+    tools_scroller: gtk::ScrolledWindow,
+    zoom_button: gtk::Button,
+    page_button: gtk::MenuButton,
+    debug_flags: std::cell::Cell<DebugFlags>,
+    log_window: std::cell::OnceCell<LogWindow>,
     state: RefCell<State>,
 }
 
@@ -123,10 +139,6 @@ impl Window {
         menu.set_parent(&list_box);
 
         let title = adw::WindowTitle::new("Ratchet", "");
-        let page_status = adw::StatusPage::builder()
-            .icon_name("document-edit-symbolic")
-            .description("The handwriting canvas arrives in phase 3.")
-            .build();
         let stack = gtk::Stack::new();
 
         let window = adw::ApplicationWindow::builder()
@@ -138,7 +150,35 @@ impl Window {
             .height_request(300)
             .build();
 
-        let this = Rc::new(Window {
+        let tools = ToolState {
+            pens: settings.pens.clone(),
+            active: settings.active_tool,
+            eraser_mode: settings.eraser_mode,
+            text_size: settings.text_size,
+            text_font: settings.text_font.clone(),
+        };
+        let this = Rc::new_cyclic(|weak: &Weak<Window>| {
+            let (w1, w2, w3) = (weak.clone(), weak.clone(), weak.clone());
+            let toolbar = Toolbar::new(
+                tools,
+                toolbar::Callbacks {
+                    on_change: Box::new(move |t| {
+                        if let Some(this) = w1.upgrade() {
+                            this.tools_changed(t);
+                        }
+                    }),
+                    on_pick: Box::new(move |slot| {
+                        let Some(this) = w2.upgrade() else { return false };
+                        this.canvas.restyle_selection(slot.color, slot.width_mm * PX_PER_MM)
+                    }),
+                    on_text: Box::new(move |cmd| {
+                        if let Some(this) = w3.upgrade() {
+                            this.canvas.text_command(cmd);
+                        }
+                    }),
+                },
+            );
+            Window {
             window,
             list,
             list_box,
@@ -146,7 +186,26 @@ impl Window {
             toasts: adw::ToastOverlay::new(),
             title,
             stack,
-            page_status,
+            canvas: Canvas::new(),
+            toolbar,
+            tools_scroller: gtk::ScrolledWindow::builder()
+                .hscrollbar_policy(gtk::PolicyType::External)
+                .vscrollbar_policy(gtk::PolicyType::Never)
+                .propagate_natural_width(true)
+                .build(),
+
+            zoom_button: gtk::Button::builder()
+                .label("100%")
+                .tooltip_text("Reset Zoom (Ctrl+0)")
+                .action_name("win.zoom-reset")
+                .css_classes(["flat", "numeric"])
+                .build(),
+            page_button: gtk::MenuButton::builder()
+                .icon_name("document-page-setup-symbolic")
+                .tooltip_text("Page Size and Background")
+                .build(),
+            debug_flags: Default::default(),
+            log_window: Default::default(),
             state: RefCell::new(State {
                 lib,
                 settings,
@@ -158,8 +217,10 @@ impl Window {
                 next_pending_id: 0,
                 editing: false,
             }),
+        }
         });
         this.build_layout();
+        this.apply_tools();
         this.install_actions(app);
         this.install_sidebar_input();
         this.restore_last_page();
@@ -199,8 +260,17 @@ impl Window {
         folder.append(Some("Change Notebooks Folder…"), Some("win.change-folder"));
         main_menu.append_section(None, &folder);
         let about = gio::Menu::new();
+        about.append(Some("Preferences"), Some("win.preferences"));
         about.append(Some("About Ratchet"), Some("win.about"));
         main_menu.append_section(None, &about);
+        if debug::enabled() {
+            let dbg = gio::Menu::new();
+            dbg.append(Some("Pen Input Overlay"), Some("win.debug-input"));
+            dbg.append(Some("Show Stroke Points"), Some("win.debug-points"));
+            dbg.append(Some("Performance Stats"), Some("win.debug-perf"));
+            dbg.append(Some("Event Log"), Some("win.debug-log"));
+            main_menu.append_section(Some("Debug"), &dbg);
+        }
         let menu_button = gtk::MenuButton::builder()
             .icon_name("open-menu-symbolic")
             .menu_model(&main_menu)
@@ -237,6 +307,20 @@ impl Window {
         content_header.set_title_widget(Some(&self.title));
         content_header.pack_start(&toggle_sidebar);
         content_header.pack_start(&new_page);
+        // Tools scroll sideways in the header instead of forcing a wide window.
+        self.tools_scroller.set_child(Some(&self.toolbar.widget));
+        content_header.pack_start(&self.tools_scroller);
+        content_header.pack_end(&self.page_button);
+        content_header.pack_end(&self.zoom_button);
+        let weak = self.weak();
+        self.page_button.set_create_popup_func(move |button| {
+            let this = upgrade!(weak);
+            button.set_popover(Some(&this.page_popover()));
+        });
+        let toolbar = self.toolbar.clone();
+        self.canvas.connect_temp_tool(move |action| toolbar.set_temp_tool(action));
+        let zoom_button = self.zoom_button.clone();
+        self.canvas.connect_zoom(move |z| zoom_button.set_label(&format!("{:.0}%", z * 100.0)));
 
         let create_first = gtk::Button::builder()
             .label("New Notebook")
@@ -251,7 +335,17 @@ impl Window {
             .child(&create_first)
             .build();
         self.stack.add_named(&empty, Some("empty"));
-        self.stack.add_named(&self.page_status, Some("page"));
+        self.stack.add_named(&self.canvas, Some("page"));
+
+        self.stack.set_transition_type(gtk::StackTransitionType::Crossfade);
+        self.stack.set_transition_duration(150);
+
+        let fullscreen = gtk::Button::builder()
+            .icon_name("view-fullscreen-symbolic")
+            .tooltip_text("Fullscreen (F11)")
+            .action_name("win.fullscreen")
+            .build();
+        content_header.pack_end(&fullscreen);
 
         let content = adw::ToolbarView::new();
         content.add_top_bar(&content_header);
@@ -284,12 +378,14 @@ impl Window {
 
         self.toasts.set_child(Some(&split));
         self.window.set_content(Some(&self.toasts));
+        self.setup_fullscreen(&split, &content, &fullscreen);
 
         // This handler owns the strong reference that keeps `Window` alive
         // for as long as the GTK window exists; everything else holds weak refs.
         let this = self.clone();
         self.window.connect_close_request(move |_| {
             this.flush_pending_delete();
+            this.canvas.flush();
             let mut st = this.state.borrow_mut();
             let mut expanded: Vec<String> = st.expanded.iter().cloned().collect();
             expanded.sort();
@@ -322,6 +418,30 @@ impl Window {
         add("open-folder", false, Box::new(|w, _| w.open_folder()));
         add("change-folder", false, Box::new(|w, _| w.change_folder()));
         add("about", false, Box::new(|w, _| w.about()));
+        add("preferences", false, Box::new(|w, _| w.preferences()));
+        add("undo", false, Box::new(|w, _| w.canvas.undo()));
+        add("redo", false, Box::new(|w, _| w.canvas.redo()));
+        add("zoom-in", false, Box::new(|w, _| w.canvas.zoom_step(1.25)));
+        add("zoom-out", false, Box::new(|w, _| w.canvas.zoom_step(1.0 / 1.25)));
+        add("zoom-reset", false, Box::new(|w, _| w.canvas.zoom_centered(1.0)));
+        if debug::enabled() {
+            self.install_debug_actions();
+        }
+
+        let weak = self.weak();
+        self.canvas.connect_history(move |can_undo, can_redo| {
+            let this = upgrade!(weak);
+            for (name, enabled) in [("undo", can_undo), ("redo", can_redo)] {
+                if let Some(a) = this.window.lookup_action(name).and_downcast::<gio::SimpleAction>() {
+                    a.set_enabled(enabled);
+                }
+            }
+        });
+        let weak = self.weak();
+        self.canvas.connect_error(move |msg| {
+            let this = upgrade!(weak);
+            this.toast(&msg);
+        });
 
         let current = self.state.borrow().settings.theme.as_str();
         let theme = gio::SimpleAction::new_stateful(
@@ -345,6 +465,13 @@ impl Window {
         app.set_accels_for_action("win.new-notebook", &["<Control><Shift>n"]);
         app.set_accels_for_action("win.rename-page", &["F2"]);
         app.set_accels_for_action("win.toggle-sidebar", &["F9"]);
+        app.set_accels_for_action("win.fullscreen", &["F11"]);
+        app.set_accels_for_action("win.undo", &["<Control>z"]);
+        app.set_accels_for_action("win.redo", &["<Control><Shift>z", "<Control>y"]);
+        app.set_accels_for_action("win.preferences", &["<Control>comma"]);
+        app.set_accels_for_action("win.zoom-in", &["<Control>plus", "<Control>equal", "<Control>KP_Add"]);
+        app.set_accels_for_action("win.zoom-out", &["<Control>minus", "<Control>KP_Subtract"]);
+        app.set_accels_for_action("win.zoom-reset", &["<Control>0", "<Control>KP_0"]);
     }
 
     fn open_target(&self) -> Option<Target> {
@@ -418,10 +545,7 @@ impl Window {
         color: Option<&str>,
         label: &str,
     ) -> gtk::ListBoxRow {
-        let hbox = gtk::Box::builder()
-            .spacing(8)
-            .margin_start(depth * 16)
-            .build();
+        let hbox = gtk::Box::builder().spacing(8).build();
         match expanded {
             Some(open) => {
                 let icon = if open { "pan-down-symbolic" } else { "pan-end-symbolic" };
@@ -446,9 +570,36 @@ impl Window {
                 .tooltip_text(label)
                 .build(),
         );
-        let row = gtk::ListBoxRow::builder().child(&hbox).selectable(false).build();
+        hbox.set_margin_top(7);
+        hbox.set_margin_bottom(7);
+        hbox.set_margin_end(10);
+        hbox.set_margin_start(10 + depth * 16);
+        let revealer = gtk::Revealer::builder()
+            .child(&hbox)
+            .reveal_child(true)
+            .transition_type(gtk::RevealerTransitionType::SlideDown)
+            .transition_duration(SIDEBAR_ANIMATION_MS)
+            .build();
+        let row = gtk::ListBoxRow::builder()
+            .child(&revealer)
+            .selectable(false)
+            .css_classes(["rt-row"])
+            .build();
         self.attach_dnd(&row);
         row
+    }
+
+    fn row_revealer(row: &gtk::ListBoxRow) -> Option<gtk::Revealer> {
+        row.child().and_downcast::<gtk::Revealer>()
+    }
+
+    /// Whether `t` is inside notebook `n` (or section `(n, s)`).
+    fn is_descendant(t: Target, n: usize, s: Option<usize>) -> bool {
+        match (t, s) {
+            (Target::Section(tn, _) | Target::Page(tn, _, _), None) => tn == n,
+            (Target::Page(tn, ts, _), Some(s)) => (tn, ts) == (n, s),
+            _ => false,
+        }
     }
 
     fn install_sidebar_input(self: &Rc<Self>) {
@@ -530,8 +681,10 @@ impl Window {
         self.menu.popup();
     }
 
+    /// Expand or collapse with a slide: children slide in after expanding,
+    /// or slide out before collapsing.
     fn toggle_expanded(self: &Rc<Self>, n: usize, s: Option<usize>) {
-        {
+        let (key, expanding) = {
             let mut st = self.state.borrow_mut();
             let nb = &st.lib.notebooks[n];
             let key = match s {
@@ -541,11 +694,65 @@ impl Window {
             if let Some(s) = s {
                 st.current_section = Some([nb.dir.clone(), nb.sections[s].dir.clone()]);
             }
-            if !st.expanded.remove(&key) {
-                st.expanded.insert(key);
+            let expanding = !st.expanded.contains(&key);
+            (key, expanding)
+        };
+        let children: Vec<gtk::Revealer> = {
+            let rows = self.state.borrow().rows.clone();
+            if expanding {
+                self.state.borrow_mut().expanded.insert(key.clone());
+                self.rebuild_sidebar();
+                let rows = self.state.borrow().rows.clone();
+                rows.iter()
+                    .enumerate()
+                    .filter(|(_, t)| Self::is_descendant(**t, n, s))
+                    .filter_map(|(i, _)| self.list.row_at_index(i as i32).as_ref().and_then(Self::row_revealer))
+                    .collect()
+            } else {
+                rows.iter()
+                    .enumerate()
+                    .filter(|(_, t)| Self::is_descendant(**t, n, s))
+                    .filter_map(|(i, _)| self.list.row_at_index(i as i32).as_ref().and_then(Self::row_revealer))
+                    .collect()
             }
+        };
+        if expanding {
+            for r in &children {
+                r.set_transition_duration(0);
+                r.set_reveal_child(false);
+                r.set_transition_duration(SIDEBAR_ANIMATION_MS);
+            }
+            glib::idle_add_local_once(move || children.iter().for_each(|r| r.set_reveal_child(true)));
+        } else {
+            children.iter().for_each(|r| r.set_reveal_child(false));
+            let weak = self.weak();
+            glib::timeout_add_local_once(Duration::from_millis(SIDEBAR_ANIMATION_MS as u64), move || {
+                let this = upgrade!(weak);
+                this.state.borrow_mut().expanded.remove(&key);
+                this.rebuild_sidebar();
+            });
+            // Update the arrow right away.
+            self.set_row_arrow(n, s, false);
         }
-        self.rebuild_sidebar();
+    }
+
+    fn set_row_arrow(&self, n: usize, s: Option<usize>, open: bool) {
+        let target = match s {
+            Some(s) => Target::Section(n, s),
+            None => Target::Notebook(n),
+        };
+        let Some(i) = self.state.borrow().rows.iter().position(|t| *t == target) else { return };
+        let icon = self
+            .list
+            .row_at_index(i as i32)
+            .as_ref()
+            .and_then(Self::row_revealer)
+            .and_then(|r| r.child())
+            .and_then(|hbox| hbox.first_child())
+            .and_downcast::<gtk::Image>();
+        if let Some(icon) = icon {
+            icon.set_icon_name(Some(if open { "pan-down-symbolic" } else { "pan-end-symbolic" }));
+        }
     }
 
     fn expand(&self, n: usize, s: Option<usize>) {
@@ -640,6 +847,7 @@ impl Window {
 
     fn perform_move(self: &Rc<Self>, src: Target, dst: Target, pos: DropPos) {
         self.flush_pending_delete();
+        self.canvas.flush();
         let result = {
             let mut st = self.state.borrow_mut();
             let st = &mut *st;
@@ -689,6 +897,7 @@ impl Window {
             Ok(_) => {}
             Err(e) => self.toast(&format!("Couldn't move: {e}")),
         }
+        self.retarget_open_page();
         self.rebuild_sidebar();
         self.update_content();
     }
@@ -729,16 +938,324 @@ impl Window {
                 let title = &sec.pages[p].title;
                 self.title.set_title(title);
                 self.title.set_subtitle(&format!("{} › {}", nb.name, sec.name));
-                self.page_status.set_title(title);
                 self.window.set_title(Some(&format!("{title} – Ratchet")));
+                let path = st.lib.page_path(n, s, p);
                 self.stack.set_visible_child_name("page");
+                drop(st);
+                self.canvas.load(Some(&path));
+                self.set_page_controls_visible(true);
             }
             None => {
                 self.title.set_title("Ratchet");
                 self.title.set_subtitle("");
                 self.window.set_title(Some("Ratchet"));
                 self.stack.set_visible_child_name("empty");
+                drop(st);
+                self.canvas.load(None);
+                self.set_page_controls_visible(false);
             }
+        }
+    }
+
+    // ---- fullscreen -----------------------------------------------------------------
+
+    /// Fullscreen shows only the canvas; the header slides down when the
+    /// pointer (or hovering pen) reaches the top edge and hides again after
+    /// it leaves for a moment.
+    fn setup_fullscreen(self: &Rc<Self>, split: &adw::OverlaySplitView, content: &adw::ToolbarView, button: &gtk::Button) {
+        let action = gio::SimpleAction::new("fullscreen", None);
+        let window = self.window.clone();
+        action.connect_activate(move |_, _| {
+            if window.is_fullscreen() {
+                window.unfullscreen();
+            } else {
+                window.fullscreen();
+            }
+        });
+        self.window.add_action(&action);
+
+        // Remembered sidebar state: (shown, collapsed).
+        let saved = Rc::new(std::cell::Cell::new((true, false)));
+        let (split, content, button) = (split.clone(), content.clone(), button.clone());
+        {
+            let content = content.clone();
+            self.window.connect_fullscreened_notify(move |w| {
+                if w.is_fullscreen() {
+                    saved.set((split.shows_sidebar(), split.is_collapsed()));
+                    // Overlay the sidebar and the header instead of laying
+                    // them out beside the canvas, so the canvas keeps its
+                    // size while they slide away (no flicker).
+                    split.set_collapsed(true);
+                    split.set_show_sidebar(false);
+                    content.set_extend_content_to_top_edge(true);
+                    content.set_reveal_top_bars(false);
+                    button.set_icon_name("view-restore-symbolic");
+                    button.set_tooltip_text(Some("Leave Fullscreen (F11)"));
+                } else {
+                    let (shown, collapsed) = saved.get();
+                    content.set_reveal_top_bars(true);
+                    content.set_extend_content_to_top_edge(false);
+                    split.set_collapsed(collapsed);
+                    split.set_show_sidebar(shown);
+                    button.set_icon_name("view-fullscreen-symbolic");
+                    button.set_tooltip_text(Some("Fullscreen (F11)"));
+                }
+            });
+        }
+
+        let hide_timer: Rc<RefCell<Option<glib::SourceId>>> = Rc::default();
+        let last_y = Rc::new(std::cell::Cell::new(0.0f64));
+        let motion = gtk::EventControllerMotion::builder().propagation_phase(gtk::PropagationPhase::Capture).build();
+        let window = self.window.clone();
+        motion.connect_motion(move |_, _, y| {
+            last_y.set(y);
+            if !window.is_fullscreen() {
+                return;
+            }
+            let header_height = content.top_bar_height() as f64;
+            if y <= 4.0 {
+                if let Some(id) = hide_timer.take() {
+                    id.remove();
+                }
+                content.set_reveal_top_bars(true);
+            } else if content.reveals_top_bars() && y > header_height + 24.0 && hide_timer.borrow().is_none() {
+                let (content, window, last_y, timer) =
+                    (content.clone(), window.clone(), last_y.clone(), hide_timer.clone());
+                let id = glib::timeout_add_local_once(Duration::from_millis(900), move || {
+                    timer.take();
+                    // Only hide if the pointer is still away from the header.
+                    if window.is_fullscreen() && last_y.get() > content.top_bar_height() as f64 + 24.0 {
+                        content.set_reveal_top_bars(false);
+                    }
+                });
+                *hide_timer.borrow_mut() = Some(id);
+            } else if y <= header_height + 24.0
+                && let Some(id) = hide_timer.take() {
+                    id.remove();
+                }
+        });
+        self.window.add_controller(motion);
+
+        // Esc leaves fullscreen when nothing else used it.
+        let keys = gtk::EventControllerKey::new();
+        let window = self.window.clone();
+        keys.connect_key_pressed(move |_, key, _, _| {
+            if key == gdk::Key::Escape && window.is_fullscreen() {
+                window.unfullscreen();
+                return glib::Propagation::Stop;
+            }
+            glib::Propagation::Proceed
+        });
+        self.window.add_controller(keys);
+    }
+
+    // ---- page controls -----------------------------------------------------------
+
+    /// Orientation new sheet pages follow: the monitor's in fullscreen,
+    /// otherwise the window's shape.
+    fn screen_is_landscape(&self) -> bool {
+        if self.window.is_fullscreen() {
+            let monitor = self
+                .window
+                .surface()
+                .and_then(|surface| gdk::Display::default()?.monitor_at_surface(&surface));
+            if let Some(m) = monitor {
+                let g = m.geometry();
+                return g.width() >= g.height();
+            }
+        }
+        self.window.width() >= self.window.height()
+    }
+
+    fn set_page_controls_visible(&self, visible: bool) {
+        self.tools_scroller.set_visible(visible);
+        self.zoom_button.set_visible(visible);
+        self.page_button.set_visible(visible);
+    }
+
+    fn open_section(&self) -> Option<(usize, usize)> {
+        let st = self.state.borrow();
+        let key = st.open_page.as_ref()?;
+        Self::resolve_page(&st.lib, key).map(|(n, s, _)| (n, s))
+    }
+
+    fn page_popover(self: &Rc<Self>) -> gtk::Popover {
+        let section = self.open_section();
+        let section_name = {
+            let st = self.state.borrow();
+            section.map_or(String::new(), |(n, s)| st.lib.notebooks[n].sections[s].name.clone())
+        };
+        let weak = self.weak();
+        let weak_unit = self.weak();
+        let canvas = self.canvas.clone();
+        let unit = self.state.borrow().settings.custom_unit;
+        let label = section_name.clone();
+        page_menu::build(
+            self.canvas.layout(),
+            &label,
+            unit,
+            page_menu::Callbacks {
+                changed: Box::new(move |layout| canvas.set_layout(layout)),
+                make_default: Box::new(move |layout| {
+                    let this = upgrade!(weak);
+                    let Some((n, s)) = this.open_section() else { return };
+                    let result = this.state.borrow_mut().lib.set_section_layout(n, s, layout);
+                    match result {
+                        Ok(()) => this.toast(&format!("New pages in “{section_name}” will use this layout")),
+                        Err(e) => this.toast(&format!("Couldn't save section default: {e}")),
+                    }
+                }),
+                unit_changed: Box::new(move |unit| {
+                    let this = upgrade!(weak_unit);
+                    let mut st = this.state.borrow_mut();
+                    st.settings.custom_unit = unit;
+                    st.settings.save();
+                }),
+            },
+        )
+    }
+
+    // ---- debug (RATCHET_DEBUG=1) ---------------------------------------------------
+
+    fn install_debug_actions(self: &Rc<Self>) {
+        type Setter = fn(&mut DebugFlags, bool);
+        let toggles: [(&str, Setter); 4] = [
+            ("debug-input", |f, v| f.input = v),
+            ("debug-points", |f, v| f.points = v),
+            ("debug-perf", |f, v| f.perf = v),
+            ("debug-log", |f, v| f.log = v),
+        ];
+        for (name, set) in toggles {
+            let action = gio::SimpleAction::new_stateful(name, None, &false.to_variant());
+            let weak = self.weak();
+            action.connect_activate(move |a, _| {
+                let this = upgrade!(weak);
+                let on = !a.state().and_then(|v| v.get::<bool>()).unwrap_or(false);
+                a.set_state(&on.to_variant());
+                let mut flags = this.debug_flags.get();
+                set(&mut flags, on);
+                this.debug_flags.set(flags);
+                this.canvas.set_debug(flags);
+                if name == "debug-log" {
+                    let log = this.log_window();
+                    if on {
+                        log.window.present();
+                        log.append("event log started");
+                    } else {
+                        log.window.set_visible(false);
+                    }
+                }
+            });
+            self.window.add_action(&action);
+        }
+        let weak = self.weak();
+        self.canvas.connect_log(move |line| {
+            let this = upgrade!(weak);
+            this.log_window().append(&line);
+        });
+    }
+
+    fn log_window(self: &Rc<Self>) -> &LogWindow {
+        self.log_window.get_or_init(|| {
+            let log = LogWindow::new(&self.window);
+            // Closing the window turns the log off.
+            let weak = self.weak();
+            log.window.connect_close_request(move |_| {
+                let this = upgrade!(weak, glib::Propagation::Proceed);
+                if let Some(a) = this.window.lookup_action("debug-log")
+                    && a.state().and_then(|v| v.get::<bool>()) == Some(true) {
+                        a.activate(None);
+                    }
+                glib::Propagation::Proceed
+            });
+            log
+        })
+    }
+
+    // ---- tools -------------------------------------------------------------------
+
+    fn tools_changed(&self, t: &ToolState) {
+        {
+            let mut st = self.state.borrow_mut();
+            st.settings.pens = t.pens.clone();
+            st.settings.active_tool = t.active;
+            st.settings.eraser_mode = t.eraser_mode;
+            st.settings.text_size = t.text_size;
+            st.settings.text_font = t.text_font.clone();
+            st.settings.save();
+        }
+        self.apply_tools();
+    }
+
+    /// Push the tool settings to the canvas.
+    fn apply_tools(&self) {
+        let st = self.state.borrow();
+        let s = &st.settings;
+        let tool = match s.active_tool {
+            ActiveTool::Slot(_) => CanvasTool::Draw,
+            ActiveTool::Eraser => CanvasTool::Erase,
+            ActiveTool::Select => CanvasTool::Select,
+            ActiveTool::Text => CanvasTool::Text,
+        };
+        // The pen to draw with: the selected slot, or the first one when
+        // another tool is active (used by inputs mapped to Draw).
+        let pen = match s.active_tool {
+            ActiveTool::Slot(i) => s.pens.get(i),
+            _ => None,
+        }
+        .or(s.pens.first());
+        let brush = pen.map(|p| Brush { tool: p.tool, color: p.color, width: p.width_mm * PX_PER_MM });
+        if tool != CanvasTool::Select {
+            self.canvas.clear_selection();
+        }
+        self.canvas.configure(|c| {
+            c.tool = tool;
+            if let Some(b) = brush {
+                c.brush = b;
+            }
+            c.eraser_mode = s.eraser_mode;
+            c.stabilizer_mm = s.smoothing.radius_mm();
+            c.smooth_passes = s.smoothing.passes();
+            c.button_2 = s.pen_button_2;
+            c.button_3 = s.pen_button_3;
+            c.eraser_end = s.pen_eraser;
+            c.text_size = s.text_size;
+            c.text_font = s.text_font.clone();
+        });
+    }
+
+    fn preferences(self: &Rc<Self>) {
+        let current = {
+            let s = &self.state.borrow().settings;
+            Prefs {
+                smoothing: s.smoothing,
+                button_2: s.pen_button_2,
+                button_3: s.pen_button_3,
+                eraser: s.pen_eraser,
+            }
+        };
+        let weak = self.weak();
+        preferences::show(&self.window, current, move |p| {
+            let this = upgrade!(weak);
+            {
+                let mut st = this.state.borrow_mut();
+                st.settings.smoothing = p.smoothing;
+                st.settings.pen_button_2 = p.button_2;
+                st.settings.pen_button_3 = p.button_3;
+                st.settings.pen_eraser = p.eraser;
+                st.settings.save();
+            }
+            this.apply_tools();
+        });
+    }
+
+    /// After a rename or move, point the canvas at the open page's new file
+    /// (keeping its undo history) instead of reloading it.
+    fn retarget_open_page(&self) {
+        let st = self.state.borrow();
+        let open = st.open_page.as_ref().and_then(|k| Self::resolve_page(&st.lib, k));
+        if let Some((n, s, p)) = open {
+            self.canvas.retarget(&st.lib.page_path(n, s, p));
         }
     }
 
@@ -764,6 +1281,7 @@ impl Window {
         let row = index.and_then(|i| self.list.row_at_index(i as i32));
         let label = row
             .as_ref()
+            .and_then(Self::row_revealer)
             .and_then(|r| r.child())
             .and_then(|hbox| hbox.last_child())
             .and_downcast::<gtk::Label>();
@@ -832,7 +1350,8 @@ impl Window {
             Err(e) => return self.toast(&format!("Couldn't create notebook: {e}")),
         };
         // Ready to write straight away: page 1 of the first section is open.
-        let page = self.state.borrow_mut().lib.create_page(n, 0);
+        let landscape = self.screen_is_landscape();
+        let page = self.state.borrow_mut().lib.create_page(n, 0, landscape);
         match page {
             Ok(p) => {
                 self.expand(n, Some(0));
@@ -878,7 +1397,8 @@ impl Window {
             self.toast("Select a section first");
             return;
         };
-        let result = self.state.borrow_mut().lib.create_page(n, s);
+        let landscape = self.screen_is_landscape();
+        let result = self.state.borrow_mut().lib.create_page(n, s, landscape);
         match result {
             Ok(p) => {
                 self.expand(n, Some(s));
@@ -902,6 +1422,8 @@ impl Window {
     }
 
     fn apply_rename(self: &Rc<Self>, target: Target, name: &str) {
+        // Renaming rewrites the page file; save the ink in it first.
+        self.canvas.flush();
         let result = {
             let mut st = self.state.borrow_mut();
             let st = &mut *st;
@@ -945,6 +1467,7 @@ impl Window {
         if let Err(e) = result {
             self.toast(&format!("Couldn't rename: {e}"));
         }
+        self.retarget_open_page();
         self.rebuild_sidebar();
         self.update_content();
     }
@@ -952,6 +1475,7 @@ impl Window {
     fn delete(self: &Rc<Self>, target: Option<Target>) {
         let Some(target) = target else { return };
         self.flush_pending_delete();
+        self.canvas.flush();
         let (name, result, id) = {
             let mut st = self.state.borrow_mut();
             let name = match target {
@@ -1031,6 +1555,7 @@ impl Window {
             let this = upgrade!(weak);
             let Some(dir) = res.ok().and_then(|f| f.path()) else { return };
             this.flush_pending_delete();
+            this.canvas.flush();
             match Library::load(&dir) {
                 Ok(lib) => {
                     let mut st = this.state.borrow_mut();

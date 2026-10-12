@@ -1,6 +1,14 @@
+mod canvas;
+mod debug;
+mod ink;
 mod library;
+mod math;
 mod naming;
+mod page_menu;
+mod preferences;
 mod settings;
+mod text;
+mod toolbar;
 mod window;
 
 use adw::prelude::*;

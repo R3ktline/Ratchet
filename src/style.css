@@ -29,3 +29,16 @@ row.drop-after {
 row.drop-into {
   background: alpha(var(--accent-bg-color), 0.25);
 }
+
+/* Tool temporarily in use through a pen button / eraser end. */
+button.temp-tool {
+  background: alpha(var(--accent-bg-color), 0.35);
+  transition: background 120ms ease-out;
+}
+
+/* Sidebar rows: padding lives inside the row's revealer so expand and
+   collapse can slide the whole row. */
+.navigation-sidebar > row.rt-row {
+  padding: 0;
+  min-height: 0;
+}
