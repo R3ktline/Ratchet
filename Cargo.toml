@@ -7,6 +7,7 @@ edition = "2024"
 ab_glyph = "0.2"
 adw = { version = "0.9.2", package = "libadwaita", features = ["v1_8"] }
 base64 = "0.23.1"
+cairo-rs = { version = "0.22.9", features = ["pdf", "png", "v1_16"] }
 gtk = { version = "0.11", package = "gtk4", features = ["v4_18"] }
 ratex-font = "0.1.14"
 ratex-font-loader = { version = "0.1.14", features = ["embed-fonts"] }

@@ -1,5 +1,7 @@
 mod canvas;
 mod debug;
+mod export;
+mod export_dialog;
 mod glyphs;
 mod ink;
 mod library;

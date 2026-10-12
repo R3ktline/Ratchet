@@ -538,15 +538,15 @@ glib::wrapper! {
         @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
 }
 
-fn rgba((r, g, b): (f32, f32, f32), a: f32) -> gdk::RGBA {
+pub(crate) fn rgba((r, g, b): (f32, f32, f32), a: f32) -> gdk::RGBA {
     gdk::RGBA::new(r, g, b, a)
 }
 
-fn rect(x: f32, y: f32, w: f32, h: f32) -> graphene::Rect {
+pub(crate) fn rect(x: f32, y: f32, w: f32, h: f32) -> graphene::Rect {
     graphene::Rect::new(x, y, w, h)
 }
 
-fn draw_stroke(snapshot: &gtk::Snapshot, stroke: &Stroke, dark: bool) {
+pub(crate) fn draw_stroke(snapshot: &gtk::Snapshot, stroke: &Stroke, dark: bool) {
     let outline = stroke.outline();
     let n = outline.len();
     if n < 3 {

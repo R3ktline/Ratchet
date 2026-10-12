@@ -309,6 +309,32 @@ impl LengthUnit {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ExportFormat {
+    #[default]
+    Pdf,
+    Png,
+}
+
+/// Export dialog choices, remembered for the next export.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ExportOptions {
+    pub format: ExportFormat,
+    /// Infinite pages: cut into A4 sheets (else one page cropped to the ink).
+    pub split_a4: bool,
+    pub background: bool,
+    pub open_after: bool,
+    pub folder: Option<PathBuf>,
+}
+
+impl Default for ExportOptions {
+    fn default() -> Self {
+        ExportOptions { format: ExportFormat::Pdf, split_a4: true, background: true, open_after: true, folder: None }
+    }
+}
+
 /// Bumped when defaults change in a way that should reach existing users.
 const SETTINGS_VERSION: u32 = 4;
 
@@ -343,6 +369,7 @@ pub struct Settings {
     pub long_press_ms: Option<u32>,
     /// Holding still at the end of a stroke this long snaps it to a shape.
     pub shape_hold_ms: Option<u32>,
+    pub export: ExportOptions,
 }
 
 impl Default for Settings {
@@ -366,6 +393,7 @@ impl Default for Settings {
             radial_items: default_radial(&default_pens()),
             long_press_ms: Some(600),
             shape_hold_ms: Some(500),
+            export: ExportOptions::default(),
         }
     }
 }

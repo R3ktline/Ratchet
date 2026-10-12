@@ -13,7 +13,10 @@ use crate::canvas::{Brush, Canvas, CanvasTool, DebugFlags, EntryLook, RadialEntr
 use crate::ink::Tool;
 use crate::debug::{self, LogWindow};
 use crate::ink::PX_PER_MM;
-use crate::library::{Detached, Library, Target};
+use crate::export;
+use crate::export_dialog;
+use crate::library::{Detached, Library, PageFile, Target};
+use crate::settings::ExportFormat;
 use crate::page_menu;
 use crate::preferences::{self, Prefs};
 use crate::settings::{ActiveTool, RadialItem, Settings, Theme};
@@ -313,6 +316,14 @@ impl Window {
         // Tools scroll sideways in the header instead of forcing a wide window.
         self.tools_scroller.set_child(Some(&self.toolbar.widget));
         content_header.pack_start(&self.tools_scroller);
+        let export = gtk::Button::builder()
+            .icon_name("document-save-as-symbolic")
+            .tooltip_text("Export Page (Ctrl+E)")
+            .action_name("win.export-page")
+            .build();
+        // Shown together with the other page controls.
+        self.page_button.bind_property("visible", &export, "visible").sync_create().build();
+        content_header.pack_end(&export);
         content_header.pack_end(&self.page_button);
         content_header.pack_end(&self.zoom_button);
         let weak = self.weak();
@@ -424,6 +435,8 @@ impl Window {
         add("rename", true, Box::new(|w, t| w.rename(t)));
         add("rename-page", false, Box::new(|w, _| w.rename(w.open_target())));
         add("delete", true, Box::new(|w, t| w.delete(t)));
+        add("export", true, Box::new(|w, t| w.export(t)));
+        add("export-page", false, Box::new(|w, _| w.export(w.open_target())));
         add("open-folder", false, Box::new(|w, _| w.open_folder()));
         add("change-folder", false, Box::new(|w, _| w.change_folder()));
         add("about", false, Box::new(|w, _| w.about()));
@@ -475,6 +488,7 @@ impl Window {
         app.set_accels_for_action("win.rename-page", &["F2"]);
         app.set_accels_for_action("win.toggle-sidebar", &["F9"]);
         app.set_accels_for_action("win.fullscreen", &["F11"]);
+        app.set_accels_for_action("win.export-page", &["<Control>e"]);
         app.set_accels_for_action("win.undo", &["<Control>z"]);
         app.set_accels_for_action("win.redo", &["<Control><Shift>z", "<Control>y"]);
         app.set_accels_for_action("win.preferences", &["<Control>comma"]);
@@ -717,6 +731,7 @@ impl Window {
         }
         let edit = gio::Menu::new();
         edit.append_item(&item("Rename…", "rename", &t));
+        edit.append_item(&item("Export…", "export", &t));
         edit.append_item(&item("Move to Trash", "delete", &t));
         menu.append_section(None, &edit);
 
@@ -1111,6 +1126,80 @@ impl Window {
             }
             RadialItem::None => {}
         }
+    }
+
+    // ---- export -------------------------------------------------------------------
+
+    /// Export a page, a whole section, or a whole notebook.
+    fn export(self: &Rc<Self>, target: Option<Target>) {
+        let Some(target) = target else { return };
+        // Make sure the open page's latest ink is on disk.
+        self.canvas.flush();
+        let (title, entries) = {
+            let st = self.state.borrow();
+            let lib = &st.lib;
+            let load = |n: usize, s: usize, p: usize, section: Option<String>| {
+                let title = lib.notebooks[n].sections[s].pages[p].title.clone();
+                PageFile::load(&lib.page_path(n, s, p)).ok().map(|page| export::Entry { page, section, title })
+            };
+            match target {
+                Target::Page(n, s, p) => {
+                    (lib.notebooks[n].sections[s].pages[p].title.clone(), load(n, s, p, None).into_iter().collect())
+                }
+                Target::Section(n, s) => {
+                    let sec = &lib.notebooks[n].sections[s];
+                    let entries: Vec<_> = (0..sec.pages.len()).filter_map(|p| load(n, s, p, None)).collect();
+                    (sec.name.clone(), entries)
+                }
+                Target::Notebook(n) => {
+                    let nb = &lib.notebooks[n];
+                    let entries: Vec<_> = nb
+                        .sections
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(s, sec)| (0..sec.pages.len()).map(move |p| (s, p, sec.name.clone())))
+                        .filter_map(|(s, p, name)| load(n, s, p, Some(name)))
+                        .collect();
+                    (nb.name.clone(), entries)
+                }
+            }
+        };
+        if entries.is_empty() {
+            self.toast("Nothing to export: no pages");
+            return;
+        }
+        let current = self.state.borrow().settings.export.clone();
+        let weak = self.weak();
+        let file_name = crate::library::sanitize(&title);
+        export_dialog::show(&self.window, &format!("Export “{title}”"), &file_name, current, move |opts, path| {
+            let this = upgrade!(weak);
+            {
+                let mut st = this.state.borrow_mut();
+                st.settings.export = opts.clone();
+                st.settings.save();
+            }
+            let doc = export::build(&title, &entries, Some(&this.window.pango_context()), &opts);
+            let result = match opts.format {
+                ExportFormat::Pdf => export::write_pdf(&doc, &path).map(|_| vec![path.clone()]),
+                ExportFormat::Png => export::write_png(&doc, &path),
+            };
+            match result {
+                Ok(files) => {
+                    let what = if files.len() > 1 { format!("{} files", files.len()) } else { "1 file".into() };
+                    this.toast(&format!("Exported {what} to {}", path.parent().map_or(String::new(), |p| p.display().to_string())));
+                    if opts.open_after
+                        && let Some(first) = files.first()
+                    {
+                        gtk::FileLauncher::new(Some(&gio::File::for_path(first))).launch(
+                            Some(&this.window),
+                            gio::Cancellable::NONE,
+                            |_| {},
+                        );
+                    }
+                }
+                Err(e) => this.toast(&format!("Export failed: {e}")),
+            }
+        });
     }
 
     // ---- page controls -----------------------------------------------------------
