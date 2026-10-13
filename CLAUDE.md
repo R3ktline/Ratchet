@@ -12,10 +12,12 @@ Pen-first notes app, Rust + GTK 4 + libadwaita. Main dev target right now is
   `./target/release/ratchet.exe`. Close a running Ratchet first (it holds
   the exe, and writes settings on exit).
 - Run `cargo test --release` after changes to settings or models.
-- On Windows the app renders in software (GTK's Cairo renderer) by
-  default; `RATCHET_GPU=1` opts into the GPU path (Direct Composition),
-  which can flicker in fullscreen on hybrid-GPU laptops. Keep everything
-  cheap to draw on the CPU: no blurred shadows, no full-window fades.
+- On Windows the app renders on the GPU (Direct Composition) when the
+  machine has one graphics adapter, and in software (Cairo) when it has
+  more (two GPUs, or a virtual one like Parsec's), where the GPU path
+  flickers in fullscreen. `RATCHET_GPU=1`/`0` forces either. Keep
+  everything cheap to draw on the CPU: no blurred shadows, no full-window
+  fades.
   Measure animations with `RATCHET_SHOW=perf` (sidebar), `perf-prefs` or
   `perf-export` (dialogs): frame gaps print to stderr.
 

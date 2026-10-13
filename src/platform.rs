@@ -38,13 +38,22 @@ pub fn px(v: f64) -> i32 {
 }
 
 /// Before GTK starts: on Windows, GTK only draws with the GPU (GL or
-/// Vulkan) through Direct Composition, which is opt-in. The app is kept
-/// cheap enough to animate smoothly in software (see NO_TRANSPARENCY_CSS),
-/// and the GPU path can flicker in fullscreen on hybrid-GPU laptops, so
-/// software is the default; `RATCHET_GPU=1` turns the GPU path on.
+/// Vulkan) through Direct Composition, which is opt-in. Use it when the
+/// machine has a single graphics adapter. With more than one (a laptop's
+/// two GPUs, or a virtual display adapter such as Parsec's) the screen
+/// flickers in fullscreen whenever a menu opens, so those stay in software,
+/// which the app is kept cheap enough to animate in (see
+/// NO_TRANSPARENCY_CSS). `RATCHET_GPU=1` / `RATCHET_GPU=0` force either.
 #[cfg(windows)]
 pub fn early_setup() {
-    if std::env::var_os("GDK_DEBUG").is_none() && std::env::var_os("RATCHET_GPU").is_some() {
+    if std::env::var_os("GDK_DEBUG").is_some() {
+        return;
+    }
+    let gpu = match std::env::var("RATCHET_GPU").as_deref() {
+        Ok("1") => true,
+        Ok("0") => false,
+        _ => win32::hardware_adapters() == 1,
+    };    if gpu {
         // SAFETY: called first thing in main, before any other thread runs.
         unsafe { std::env::set_var("GDK_DEBUG", "dcomp") };
     }
@@ -263,6 +272,78 @@ mod win32 {
 
     unsafe extern "C" {
         pub fn gdk_win32_surface_get_handle(surface: *mut c_void) -> Hwnd;
+    }
+
+    #[repr(C)]
+    struct Guid(u32, u16, u16, [u8; 8]);
+
+    /// IID_IDXGIFactory1.
+    const IID_IDXGI_FACTORY1: Guid = Guid(0x770a_ae78, 0xf26f, 0x4dba, [0xa8, 0x29, 0x25, 0x3c, 0x83, 0xd1, 0xb3, 0x87]);
+    const DXGI_ADAPTER_FLAG_SOFTWARE: u32 = 2;
+
+    #[repr(C)]
+    struct AdapterDesc1 {
+        description: [u16; 128],
+        vendor_id: u32,
+        device_id: u32,
+        sub_sys_id: u32,
+        revision: u32,
+        dedicated_video_memory: usize,
+        dedicated_system_memory: usize,
+        shared_system_memory: usize,
+        luid: [u32; 2],
+        flags: u32,
+    }
+
+    #[link(name = "dxgi")]
+    unsafe extern "system" {
+        fn CreateDXGIFactory1(riid: *const Guid, factory: *mut *mut c_void) -> i32;
+    }
+
+    /// Calls entry `index` of a COM object's vtable.
+    unsafe fn vtable(obj: *mut c_void, index: usize) -> *const c_void {
+        // SAFETY: a COM object starts with a pointer to its vtable.
+        unsafe { *(*(obj as *const *const *const c_void)).add(index) }
+    }
+
+    /// How many hardware graphics adapters DXGI lists (real GPUs and
+    /// virtual display adapters, not the software one). 0 if unknown.
+    pub fn hardware_adapters() -> usize {
+        type EnumAdapters1 = unsafe extern "system" fn(*mut c_void, u32, *mut *mut c_void) -> i32;
+        type GetDesc1 = unsafe extern "system" fn(*mut c_void, *mut AdapterDesc1) -> i32;
+        type Release = unsafe extern "system" fn(*mut c_void) -> u32;
+        // IDXGIFactory1::EnumAdapters1 and IDXGIAdapter1::GetDesc1 come after
+        // IUnknown (3), IDXGIObject (4) and their base interface's methods.
+        const ENUM_ADAPTERS1: usize = 12;
+        const GET_DESC1: usize = 10;
+        const RELEASE: usize = 2;
+
+        let mut factory = std::ptr::null_mut();
+        // SAFETY: plain COM calls through the documented vtable layouts; every
+        // object obtained is released.
+        unsafe {
+            if CreateDXGIFactory1(&IID_IDXGI_FACTORY1, &mut factory) < 0 || factory.is_null() {
+                return 0;
+            }
+            let enum_adapters: EnumAdapters1 = std::mem::transmute(vtable(factory, ENUM_ADAPTERS1));
+            let mut count = 0;
+            for i in 0.. {
+                let mut adapter = std::ptr::null_mut();
+                if enum_adapters(factory, i, &mut adapter) < 0 || adapter.is_null() {
+                    break;
+                }
+                let get_desc: GetDesc1 = std::mem::transmute(vtable(adapter, GET_DESC1));
+                let mut desc: AdapterDesc1 = std::mem::zeroed();
+                if get_desc(adapter, &mut desc) >= 0 && desc.flags & DXGI_ADAPTER_FLAG_SOFTWARE == 0 {
+                    count += 1;
+                }
+                let release: Release = std::mem::transmute(vtable(adapter, RELEASE));
+                release(adapter);
+            }
+            let release: Release = std::mem::transmute(vtable(factory, RELEASE));
+            release(factory);
+            count
+        }
     }
 
     pub unsafe extern "system" fn subclass_proc(
