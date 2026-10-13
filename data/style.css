@@ -56,3 +56,8 @@ button.rt-spot {
 button.rt-pop {
   animation: rt-pop 260ms ease-out;
 }
+
+/* Main menu button showing the app logo in the system accent color. */
+.app-logo image {
+  color: var(--accent-color);
+}

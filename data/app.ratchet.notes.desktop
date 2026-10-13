@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Ratchet
+Comment=Handwritten notes for pen and tablet
+Exec=ratchet
+Icon=app.ratchet.notes
+Terminal=false
+Categories=Office;Education;GTK;
+Keywords=notes;handwriting;pen;stylus;tablet;notebook;
+StartupWMClass=app.ratchet.notes

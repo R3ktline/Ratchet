@@ -277,17 +277,23 @@ impl Window {
             dbg.append(Some("Event Log"), Some("win.debug-log"));
             main_menu.append_section(Some("Debug"), &dbg);
         }
-        let menu_button = gtk::MenuButton::builder()
-            .icon_name("open-menu-symbolic")
-            .menu_model(&main_menu)
-            .tooltip_text("Main Menu")
-            .primary(true)
-            .build();
+        // The app logo doubles as the main menu button.
+        // The app logo doubles as the main menu button.
+        let logo_button = || {
+            gtk::MenuButton::builder()
+                .icon_name("app.ratchet.notes-symbolic")
+                .menu_model(&main_menu)
+                .tooltip_text("Main Menu")
+                .css_classes(["app-logo"])
+                .primary(true)
+                .build()
+        };
+        let menu_button = logo_button();
 
         let sidebar_header = adw::HeaderBar::new();
         sidebar_header.set_title_widget(Some(&adw::WindowTitle::new("Ratchet", "")));
-        sidebar_header.pack_start(&new_notebook);
-        sidebar_header.pack_end(&menu_button);
+        sidebar_header.pack_start(&menu_button);
+        sidebar_header.pack_end(&new_notebook);
 
         let sidebar = adw::ToolbarView::new();
         sidebar.add_top_bar(&sidebar_header);
@@ -311,7 +317,25 @@ impl Window {
             .build();
         let content_header = adw::HeaderBar::new();
         content_header.set_title_widget(Some(&self.title));
+        // Shown while the sidebar (and its logo) is hidden.
+        let content_logo = logo_button();
+        content_header.pack_start(&content_logo);
         content_header.pack_start(&toggle_sidebar);
+        // The logo buttons take the place of the window icon some layouts
+        // show, which is the fixed-color app icon.
+        if let Some(settings) = gtk::Settings::default() {
+            let sync = {
+                let headers = [sidebar_header.clone(), content_header.clone()];
+                move |settings: &gtk::Settings| {
+                    let layout = without_icon(&settings.gtk_decoration_layout().unwrap_or_default());
+                    for header in &headers {
+                        header.set_decoration_layout(Some(&layout));
+                    }
+                }
+            };
+            sync(&settings);
+            settings.connect_gtk_decoration_layout_notify(sync);
+        }
         content_header.pack_start(&new_page);
         // Tools scroll sideways in the header instead of forcing a wide window.
         self.tools_scroller.set_child(Some(&self.toolbar.widget));
@@ -377,6 +401,7 @@ impl Window {
             .max_sidebar_width(320.0)
             .build();
         split.bind_property("show-sidebar", &toggle_sidebar, "active").bidirectional().build();
+        split.bind_property("show-sidebar", &content_logo, "visible").invert_boolean().sync_create().build();
         let _ = self.split.set(split.clone());
 
         // Collapse the sidebar into an overlay on narrow windows.
@@ -1780,10 +1805,20 @@ impl Window {
     fn about(&self) {
         adw::AboutDialog::builder()
             .application_name("Ratchet")
+            .application_icon(crate::APP_ID)
             .version(env!("CARGO_PKG_VERSION"))
             .comments("Handwritten notes for university students.")
             .developer_name("r3ktline")
             .build()
             .present(Some(&self.window));
     }
+}
+
+/// A GTK decoration layout ("icon:minimize,close") with the window icon removed.
+fn without_icon(layout: &str) -> String {
+    layout
+        .split(':')
+        .map(|side| side.split(',').filter(|b| b.trim() != "icon").collect::<Vec<_>>().join(","))
+        .collect::<Vec<_>>()
+        .join(":")
 }

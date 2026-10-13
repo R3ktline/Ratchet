@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <!-- Under the app's resource base path: GtkApplication adds icons/ to the
+       icon theme and libadwaita loads style.css. -->
+  <gresource prefix="/app/ratchet/notes">
+    <file>icons/scalable/apps/app.ratchet.notes.svg</file>
+    <file>icons/scalable/apps/app.ratchet.notes-symbolic.svg</file>
+    <file>style.css</file>
+  </gresource>
+</gresources>

@@ -1,5 +1,6 @@
 //! App preferences, stored in `<config dir>/ratchet/settings.json`.
 
+use std::cell::Cell;
 use std::fs;
 use std::path::PathBuf;
 
@@ -42,7 +43,97 @@ impl Theme {
             Theme::Light => adw::ColorScheme::ForceLight,
             Theme::Dark => adw::ColorScheme::ForceDark,
         };
-        adw::StyleManager::default().set_color_scheme(scheme);
+        let manager = adw::StyleManager::default();
+        manager.set_color_scheme(scheme);
+        FORCED.with(|forced| {
+            forced.set(self);
+            if !forced.registered.replace(true) {
+                gtk::style_context_add_provider_for_display(
+                    &gtk::gdk::Display::default().expect("display"),
+                    &forced.provider,
+                    gtk::STYLE_PROVIDER_PRIORITY_USER + 1,
+                );
+                manager.connect_accent_color_notify(|_| FORCED.with(|f| f.set(f.theme.get())));
+            }
+        });
+    }
+}
+
+thread_local! {
+    static FORCED: ForcedPalette = ForcedPalette {
+        provider: gtk::CssProvider::new(),
+        theme: Cell::new(Theme::System),
+        registered: Cell::new(false),
+    };
+}
+
+/// Desktop color schemes (e.g. Matugen) recolor every GTK app through the
+/// user's gtk.css, which outranks app styles. Following the system keeps
+/// those colors; a forced light or dark style puts the stock libadwaita
+/// palette above them so the whole window switches, not just the page.
+struct ForcedPalette {
+    provider: gtk::CssProvider,
+    theme: Cell<Theme>,
+    registered: Cell<bool>,
+}
+
+impl ForcedPalette {
+    fn set(&self, theme: Theme) {
+        self.theme.set(theme);
+        let dark = match theme {
+            Theme::System => return self.provider.load_from_string(""),
+            Theme::Light => false,
+            Theme::Dark => true,
+        };
+        let (fg, colors): (&str, &[(&str, &str)]) = if dark {
+            ("#ffffff", &[
+                ("window", "#222226"),
+                ("view", "#1d1d20"),
+                ("headerbar", "#2e2e32"),
+                ("sidebar", "#2e2e32"),
+                ("secondary_sidebar", "#28282c"),
+                ("card", "rgba(255, 255, 255, 0.08)"),
+                ("overview", "#28282c"),
+                ("popover", "#36363a"),
+                ("dialog", "#36363a"),
+            ])
+        } else {
+            ("rgba(0, 0, 6, 0.8)", &[
+                ("window", "#fafafb"),
+                ("view", "#ffffff"),
+                ("headerbar", "#ffffff"),
+                ("sidebar", "#ebebed"),
+                ("secondary_sidebar", "#f3f3f5"),
+                ("card", "#ffffff"),
+                ("overview", "#f3f3f5"),
+                ("popover", "#ffffff"),
+                ("dialog", "#fafafb"),
+            ])
+        };
+        // The system accent, as libadwaita would use it without the user CSS.
+        let accent = adw::StyleManager::default().accent_color();
+        let mut named = vec![
+            ("accent_bg_color".to_string(), accent.to_rgba().to_string()),
+            ("accent_fg_color".to_string(), "#ffffff".to_string()),
+            ("accent_color".to_string(), accent.to_standalone_rgba(dark).to_string()),
+            ("headerbar_backdrop_color".to_string(), colors[0].1.to_string()),
+            ("sidebar_backdrop_color".to_string(), colors[3].1.to_string()),
+        ];
+        for (name, bg) in colors {
+            named.push((format!("{name}_bg_color"), bg.to_string()));
+            named.push((format!("{name}_fg_color"), fg.to_string()));
+        }
+        // Both the legacy named colors and the CSS variables libadwaita reads.
+        let mut css = String::new();
+        for (name, value) in &named {
+            css += &format!("@define-color {name} {value};\n");
+        }
+        css += ":root {\n";
+        for (name, value) in &named {
+            css += &format!("  --{}: {value};\n", name.replace('_', "-"));
+        }
+        css += "}\n";
+        self.provider.load_from_string(&css);
     }
 }
 

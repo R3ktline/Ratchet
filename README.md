@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/ratchet-horizontal-color-on-dark.svg">
+    <img alt="Ratchet" src="assets/ratchet-horizontal-color.svg" width="360">
+  </picture>
+</p>
+
 # Ratchet
 
 A pen-first note-taking app for drawing tablets and 2-in-1s, built with GTK 4,
@@ -87,11 +94,19 @@ cd Ratchet
 cargo run --release
 ```
 
-The binary ends up at `target/release/ratchet`. To put it on your `PATH`:
+The binary ends up at `target/release/ratchet`.
+
+### 3. Install (optional)
+
+To put `ratchet` on your `PATH` and add it to your app launcher with its icon:
 
 ```sh
 cargo install --path .
+install -Dm644 data/app.ratchet.notes.desktop ~/.local/share/applications/app.ratchet.notes.desktop
+install -Dm644 data/icons/scalable/apps/app.ratchet.notes.svg ~/.local/share/icons/hicolor/scalable/apps/app.ratchet.notes.svg
 ```
+
+This assumes `~/.cargo/bin` is on your `PATH`, where `cargo install` puts the binary.
 
 ---
 
@@ -142,7 +157,8 @@ cd Ratchet
 cargo run --release
 ```
 
-The first build takes a few minutes.
+The first build takes a few minutes. The Ratchet icon is embedded in
+`ratchet.exe`, so it shows in Explorer and the taskbar.
 
 ### Running outside the MSYS2 shell
 

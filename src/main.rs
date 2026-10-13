@@ -17,21 +17,15 @@ mod toolbar;
 mod window;
 
 use adw::prelude::*;
-use gtk::{gdk, glib};
+use gtk::{gio, glib};
 
 const APP_ID: &str = "app.ratchet.notes";
 
 fn main() -> glib::ExitCode {
+    gio::resources_register_include!("ratchet.gresource").expect("register resources");
     let app = adw::Application::builder().application_id(APP_ID).build();
-    app.connect_startup(|_| {
-        let css = gtk::CssProvider::new();
-        css.load_from_string(include_str!("style.css"));
-        gtk::style_context_add_provider_for_display(
-            &gdk::Display::default().expect("display"),
-            &css,
-            gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
-        );
-    });
+    // Styles and icons come from the resources (see data/ratchet.gresource.xml).
+    app.connect_startup(|_| gtk::Window::set_default_icon_name(APP_ID));
     app.connect_activate(|app| {
         // Single instance: re-activating focuses the existing window.
         if let Some(win) = app.active_window() {
