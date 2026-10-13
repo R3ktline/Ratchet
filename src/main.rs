@@ -77,6 +77,8 @@ preferencespage > scrolledwindow > viewport > clamp > box {{ margin-left: 0; mar
 .rt-tool-group {{ padding: {inset}; border-spacing: {inner}; border-radius: {group_radius}; }}
 .rt-slots {{ border-spacing: {inner}; }}
 .rt-tool-group button {{ border-radius: {radius}; }}
+/* Export stands beside the clusters, so it takes their height and corners. */
+button.rt-export {{ min-height: {group_h}; border-radius: {group_radius}; }}
 .nb-dot {{ min-width: {dot}; min-height: {dot}; }}
 .rt-popover {{ padding: {pad_x}; }}
 popover.menu > contents {{ padding: {pad_y_menu}; }}
@@ -96,6 +98,8 @@ popover.menu .title {{ padding: {pad_y_menu} {menu_pad} {pad_y}; }}
         inset = px(3.0),
         inner = px(4.0),
         group_radius = px(9.0),
+        // A cluster is a button plus its inset on both sides.
+        group_h = px(30.0 + 2.0 * 3.0),
         dot = px(10.0),
         pad_bar = px(12.0),
         pad_y_menu = px(6.0),
