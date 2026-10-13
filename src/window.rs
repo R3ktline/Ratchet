@@ -399,8 +399,11 @@ impl Window {
             .content(&content)
             .min_sidebar_width(220.0)
             .max_sidebar_width(320.0)
+            // Only the user opens or closes the sidebar, not window resizes.
+            .pin_sidebar(true)
+            .show_sidebar(self.state.borrow().settings.show_sidebar)
             .build();
-        split.bind_property("show-sidebar", &toggle_sidebar, "active").bidirectional().build();
+        split.bind_property("show-sidebar", &toggle_sidebar, "active").bidirectional().sync_create().build();
         split.bind_property("show-sidebar", &content_logo, "visible").invert_boolean().sync_create().build();
         let _ = self.split.set(split.clone());
 
@@ -435,6 +438,9 @@ impl Window {
             let mut expanded: Vec<String> = st.expanded.iter().cloned().collect();
             expanded.sort();
             st.settings.expanded = expanded;
+            if let Some(split) = this.split.get() {
+                st.settings.show_sidebar = split.shows_sidebar();
+            }
             st.settings.save();
             glib::Propagation::Proceed
         });

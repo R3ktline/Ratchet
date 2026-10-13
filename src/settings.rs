@@ -442,6 +442,8 @@ pub struct Settings {
     pub last_page: Option<[String; 3]>,
     /// Expanded sidebar items: notebook folders and "notebook/section" paths.
     pub expanded: Vec<String>,
+    /// Whether the sidebar is open, as the user last left it.
+    pub show_sidebar: bool,
     pub pens: Vec<PenSlot>,
     pub active_tool: ActiveTool,
     pub eraser_mode: EraserMode,
@@ -471,6 +473,7 @@ impl Default for Settings {
             library_dir: None,
             last_page: None,
             expanded: Vec::new(),
+            show_sidebar: true,
             pens: default_pens(),
             active_tool: ActiveTool::Slot(0),
             eraser_mode: EraserMode::default(),
