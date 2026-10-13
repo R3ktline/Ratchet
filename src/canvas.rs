@@ -399,6 +399,8 @@ mod imp {
         pub(super) clipboard: RefCell<Vec<Stroke>>,
         /// Modifier keys at the start of the current gesture.
         pub(super) mods: Cell<gdk::ModifierType>,
+        /// Pen side buttons (BUTTON2/3 masks) the raw event handler has seen held.
+        pub(super) pen_buttons: Cell<gdk::ModifierType>,
         pub(super) zoom_anim: RefCell<Option<(adw::TimedAnimation, f32)>>,
         pub(super) fade: Cell<f64>,
         pub(super) fade_anim: RefCell<Option<adw::Animation>>,
@@ -461,6 +463,7 @@ mod imp {
                 sel_op: RefCell::default(),
                 clipboard: RefCell::default(),
                 mods: Cell::new(gdk::ModifierType::empty()),
+                pen_buttons: Cell::new(gdk::ModifierType::empty()),
                 zoom_anim: RefCell::default(),
                 fade: Cell::new(1.0),
                 fade_anim: RefCell::default(),
@@ -536,6 +539,15 @@ glib::wrapper! {
     pub struct Canvas(ObjectSubclass<imp::Canvas>)
         @extends gtk::Widget,
         @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
+}
+
+/// The held-button mask of a pen side button.
+fn button_mask(button: u32) -> Option<gdk::ModifierType> {
+    match button {
+        2 => Some(gdk::ModifierType::BUTTON2_MASK),
+        3 => Some(gdk::ModifierType::BUTTON3_MASK),
+        _ => None,
+    }
 }
 
 pub(crate) fn rgba((r, g, b): (f32, f32, f32), a: f32) -> gdk::RGBA {
@@ -1300,6 +1312,13 @@ impl Canvas {
     // ---- input -------------------------------------------------------------------
 
     fn setup_input(&self) {
+        // Pen state GTK doesn't report on some platforms (see platform::pen_buttons).
+        self.connect_realize(|canvas| {
+            if let Some(surface) = canvas.native().and_then(|n| n.surface()) {
+                crate::platform::hook_pen(&surface);
+            }
+        });
+
         // Only the tip touching the tablet starts a gesture. Side buttons
         // pressed while hovering also arrive as button presses (2/3); they
         // only matter as held modifiers when the tip comes down.
@@ -1489,13 +1508,34 @@ impl Canvas {
             if event.device_tool().is_none() {
                 return glib::Propagation::Proceed;
             }
-            let Some(button) = event.downcast_ref::<gdk::ButtonEvent>().map(|b| b.button()) else {
+            let held = canvas.imp().pen_buttons.get();
+            let (button, pressed) = if let Some(b) = event.downcast_ref::<gdk::ButtonEvent>() {
+                let button = b.button();
+                if button == gdk::BUTTON_PRIMARY {
+                    return glib::Propagation::Proceed;
+                }
+                let pressed = event.event_type() == gdk::EventType::ButtonPress;
+                if let Some(mask) = button_mask(button) {
+                    canvas.imp().pen_buttons.set(if pressed { held | mask } else { held - mask });
+                }
+                (button, pressed)
+            } else if event.event_type() == gdk::EventType::MotionNotify {
+                // Windows Ink sends no button events for side buttons while
+                // hovering, only the held mask on motion: turn its edges into
+                // presses/releases. Mid-gesture, the stylus motion handler
+                // already follows the mask.
+                let now = (event.modifier_state() | crate::platform::pen_buttons())
+                    & (gdk::ModifierType::BUTTON2_MASK | gdk::ModifierType::BUTTON3_MASK);
+                canvas.imp().pen_buttons.set(now);
+                if now == held || canvas.imp().action.get() != Action::Ignore {
+                    return glib::Propagation::Proceed;
+                }
+                let changed = now ^ held;
+                let button = if changed.contains(gdk::ModifierType::BUTTON3_MASK) { 3 } else { 2 };
+                (button, now.intersects(changed))
+            } else {
                 return glib::Propagation::Proceed;
             };
-            if button == gdk::BUTTON_PRIMARY {
-                return glib::Propagation::Proceed;
-            }
-            let pressed = event.event_type() == gdk::EventType::ButtonPress;
             if canvas.imp().action.get() == Action::Ignore {
                 // Hovering: a button mapped to the menu opens it at the pen;
                 // releasing it over an item picks that item (released on the
@@ -1615,7 +1655,7 @@ impl Canvas {
     /// The action for the pen's current state, and whether a held side
     /// button decided it.
     fn stylus_mapping(&self, g: &gtk::GestureStylus) -> (Action, bool) {
-        let state = g.current_event_state();
+        let state = g.current_event_state() | crate::platform::pen_buttons();
         let held = state.intersects(gdk::ModifierType::BUTTON2_MASK | gdk::ModifierType::BUTTON3_MASK);
         let config = self.imp().config.borrow();
         let mapped = if g.device_tool().is_some_and(|t| t.tool_type() == gdk::DeviceToolType::Eraser) {

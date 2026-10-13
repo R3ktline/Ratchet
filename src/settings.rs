@@ -479,7 +479,8 @@ impl Default for Settings {
             eraser_mode: EraserMode::default(),
             smoothing: Smoothing::Low,
             pen_button_2: ButtonAction::Menu,
-            pen_button_3: ButtonAction::Pan,
+            // Windows Ink reports the barrel button only as button 3.
+            pen_button_3: if cfg!(windows) { ButtonAction::Menu } else { ButtonAction::Pan },
             pen_eraser: ButtonAction::Eraser,
             custom_unit: LengthUnit::default(),
             text_size: TextSize::default(),

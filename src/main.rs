@@ -8,6 +8,7 @@ mod library;
 mod math;
 mod naming;
 mod page_menu;
+mod platform;
 mod preferences;
 mod radial_editor;
 mod settings;
@@ -25,7 +26,10 @@ fn main() -> glib::ExitCode {
     gio::resources_register_include!("ratchet.gresource").expect("register resources");
     let app = adw::Application::builder().application_id(APP_ID).build();
     // Styles and icons come from the resources (see data/ratchet.gresource.xml).
-    app.connect_startup(|_| gtk::Window::set_default_icon_name(APP_ID));
+    app.connect_startup(|_| {
+        gtk::Window::set_default_icon_name(APP_ID);
+        platform::setup();
+    });
     app.connect_activate(|app| {
         // Single instance: re-activating focuses the existing window.
         if let Some(win) = app.active_window() {
