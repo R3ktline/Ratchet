@@ -1,7 +1,123 @@
+/* ---- Look: calm neutrals after Notion, OneNote-style section colors ----
+   Warm greys instead of libadwaita's blue-greys, quiet borders, the accent
+   kept for the few things that should stand out. */
+:root {
+  --window-bg-color: #ffffff;
+  --window-fg-color: #37352f;
+  --view-bg-color: #ffffff;
+  --view-fg-color: #37352f;
+  --headerbar-bg-color: #ffffff;
+  --headerbar-fg-color: #37352f;
+  --headerbar-backdrop-color: #ffffff;
+  --headerbar-shade-color: rgba(55, 53, 47, 0.09);
+  --sidebar-bg-color: #f7f7f5;
+  --sidebar-fg-color: #37352f;
+  --sidebar-backdrop-color: #f7f7f5;
+  --sidebar-shade-color: rgba(55, 53, 47, 0.09);
+  --popover-bg-color: #ffffff;
+  --popover-fg-color: #37352f;
+  --dialog-bg-color: #ffffff;
+  --dialog-fg-color: #37352f;
+  --card-bg-color: #f7f7f5;
+  --card-fg-color: #37352f;
+  --border-color: rgba(55, 53, 47, 0.12);
+  --rt-hover: rgba(55, 53, 47, 0.06);
+  --rt-active: rgba(55, 53, 47, 0.1);
+  --rt-dim: rgba(55, 53, 47, 0.55);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --window-bg-color: #191919;
+    --window-fg-color: #e3e2e0;
+    --view-bg-color: #191919;
+    --view-fg-color: #e3e2e0;
+    --headerbar-bg-color: #191919;
+    --headerbar-fg-color: #e3e2e0;
+    --headerbar-backdrop-color: #191919;
+    --headerbar-shade-color: rgba(255, 255, 255, 0.07);
+    --sidebar-bg-color: #202020;
+    --sidebar-fg-color: #e3e2e0;
+    --sidebar-backdrop-color: #202020;
+    --sidebar-shade-color: rgba(255, 255, 255, 0.07);
+    --popover-bg-color: #252525;
+    --popover-fg-color: #e3e2e0;
+    --dialog-bg-color: #202020;
+    --dialog-fg-color: #e3e2e0;
+    --card-bg-color: #2a2a2a;
+    --card-fg-color: #e3e2e0;
+    --border-color: rgba(255, 255, 255, 0.09);
+    --rt-hover: rgba(255, 255, 255, 0.055);
+    --rt-active: rgba(255, 255, 255, 0.09);
+    --rt-dim: rgba(255, 255, 255, 0.46);
+  }
+}
+
+/* Header: one hairline under it, nothing else. */
+.rt-bar, headerbar {
+  box-shadow: inset 0 -1px var(--headerbar-shade-color);
+}
+.rt-bar .title {
+  font-weight: 600;
+}
+.rt-bar .subtitle {
+  color: var(--rt-dim);
+  opacity: 1;
+}
+
+/* Flat buttons: no fill until hovered (Notion), soft fill when pressed or
+   checked. */
+.rt-bar button.flat:hover,
+.rt-tool-group button:hover,
+.navigation-sidebar > row:hover {
+  background: var(--rt-hover);
+}
+.rt-bar button.flat:checked,
+.rt-tool-group button:checked,
+.rt-bar button.flat:active {
+  background: var(--rt-active);
+}
+
+/* Sidebar (Notion): soft rounded rows, quiet chevrons, regular weight. */
+.navigation-sidebar {
+  background: none;
+}
+.navigation-sidebar > row {
+  border-radius: 6px;
+  margin: 1px 6px;
+}
+.navigation-sidebar > row:selected {
+  background: var(--rt-active);
+  color: inherit;
+}
+.navigation-sidebar image.rt-chevron,
+.navigation-sidebar image.rt-page-icon {
+  color: var(--rt-dim);
+}
+.navigation-sidebar .rt-section-label {
+  font-weight: 500;
+}
+
+/* OneNote-style section tab: a short colored bar in the notebook's color. */
+.rt-section-tab {
+  min-width: 4px;
+  border-radius: 2px;
+}
+
+/* Dialogs and popovers (Notion): lists sit on the surface with hairline
+   dividers instead of filled cards. */
+.boxed-list,
+list.boxed-list {
+  background: var(--card-bg-color);
+  box-shadow: 0 0 0 1px var(--border-color);
+}
+preferencesgroup label.heading {
+  color: var(--rt-dim);
+  font-size: 0.9em;
+  font-weight: 600;
+}
+
 /* Notebook color dots (names match library::PALETTE). */
 .nb-dot {
-  min-width: 10px;
-  min-height: 10px;
   border-radius: 50%;
 }
 .nb-blue { background: #3584e4; }
@@ -60,4 +176,32 @@ button.rt-pop {
 /* Main menu button showing the app logo in the system accent color. */
 .app-logo image {
   color: var(--accent-color);
+}
+
+/* Header tools come in clusters (pens, highlighters, tools, history, page)
+   so related buttons read as one control; sizes are in main.rs
+   (load_sizes). */
+.rt-tool-group {
+  background: alpha(currentColor, 0.06);
+}
+/* A cluster's "add" button stays quieter than the tools beside it. */
+.rt-add {
+  opacity: 0.55;
+}
+.rt-add:hover {
+  opacity: 1;
+}
+
+/* Export stands out from the view controls without shouting. */
+button.rt-export {
+  background: alpha(var(--accent-bg-color), 0.22);
+}
+button.rt-export:hover {
+  background: alpha(var(--accent-bg-color), 0.35);
+}
+
+/* The content header is a plain bar (see window.rs), styled like one. */
+.rt-bar {
+  background: var(--headerbar-bg-color);
+  color: var(--headerbar-fg-color);
 }

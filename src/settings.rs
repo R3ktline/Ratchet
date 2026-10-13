@@ -169,12 +169,8 @@ impl PenSlot {
 
 fn default_pens() -> Vec<PenSlot> {
     vec![
+        // One pen to start; more are one click away (the toolbar's "+").
         PenSlot::new(Tool::Pen, InkColor::Ink),
-        PenSlot::new(Tool::Pen, InkColor::Rgb(0x1c, 0x71, 0xd8)),
-        PenSlot::new(Tool::Pen, InkColor::Rgb(0xe0, 0x1b, 0x24)),
-        PenSlot::new(Tool::Pen, InkColor::Rgb(0x26, 0xa2, 0x69)),
-        PenSlot::new(Tool::Highlighter, InkColor::Rgb(0xf6, 0xd3, 0x2d)),
-        PenSlot::new(Tool::Highlighter, InkColor::Rgb(0x8f, 0xf0, 0xa4)),
     ]
 }
 
@@ -262,8 +258,8 @@ impl ButtonAction {
             ButtonAction::Pan => "Pan",
             ButtonAction::Select => "Select",
             ButtonAction::Draw => "Draw",
-            ButtonAction::Menu => "Radial menu",
-            ButtonAction::Click => "Normal click",
+            ButtonAction::Menu => "Menu",
+            ButtonAction::Click => "Click",
         }
     }
 }
@@ -427,7 +423,7 @@ impl Default for ExportOptions {
 }
 
 /// Bumped when defaults change in a way that should reach existing users.
-const SETTINGS_VERSION: u32 = 4;
+const SETTINGS_VERSION: u32 = 5;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(default)]
@@ -445,6 +441,8 @@ pub struct Settings {
     /// Whether the sidebar is open, as the user last left it.
     pub show_sidebar: bool,
     pub pens: Vec<PenSlot>,
+    /// Whether the toolbar shows the text tool (added from its "+" menu).
+    pub show_text_tool: bool,
     pub active_tool: ActiveTool,
     pub eraser_mode: EraserMode,
     pub smoothing: Smoothing,
@@ -475,6 +473,7 @@ impl Default for Settings {
             expanded: Vec::new(),
             show_sidebar: true,
             pens: default_pens(),
+            show_text_tool: false,
             active_tool: ActiveTool::Slot(0),
             eraser_mode: EraserMode::default(),
             smoothing: Smoothing::Low,
@@ -522,6 +521,11 @@ impl Settings {
         if s.version == 3 {
             // Long press got 40% shorter (older files never had one saved).
             s.long_press_ms = s.long_press_ms.map(|ms| ms * 6 / 10);
+        }
+        if s.version < 5 {
+            // The text tool became optional (off for new users); keep it for
+            // those who already had it.
+            s.show_text_tool = true;
         }
         s.version = SETTINGS_VERSION;
         if s.pens.is_empty() {
@@ -572,7 +576,12 @@ mod tests {
         assert_eq!((s.pen_button_2, s.pen_button_3, s.pen_eraser), (ButtonAction::Menu, ButtonAction::Pan, ButtonAction::Eraser));
         assert_eq!(s.radial_items[0], RadialItem::Slot(0));
         assert_eq!(s.radial_items[1], RadialItem::Hand);
-        assert_eq!(s.radial_items[6], RadialItem::Slot(4));
+        // One default pen: no highlighter or second pen in the menu.
+        assert_eq!(s.radial_items.len(), 6);
+        assert_eq!(s.radial_items[5], RadialItem::Select);
+        // Existing users keep the text tool; new ones start without it.
+        assert!(s.show_text_tool);
+        assert!(!Settings::default().show_text_tool);
         // Already migrated settings keep the user's choices.
         assert_eq!(s.long_press_ms, Some(600));
         let v3: Settings = serde_json::from_str(r#"{"version":3,"long_press_ms":1200}"#).unwrap();

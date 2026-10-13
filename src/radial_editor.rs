@@ -224,7 +224,7 @@ pub fn show(
     });
     ring.put(&disc, 0.0, 0.0);
 
-    let remove = gtk::Button::builder().label("Remove").css_classes(["destructive-action"]).sensitive(false).build();
+    let remove = gtk::Button::builder().label("Remove").css_classes(["text-button", "destructive-action"]).sensitive(false).build();
     let count = gtk::Label::builder().css_classes(["dim-label", "caption"]).build();
 
     let editor = Rc::new(Editor {
@@ -336,14 +336,18 @@ pub fn show(
             .child(&shelf_box)
             .hscrollbar_policy(gtk::PolicyType::Never)
             .propagate_natural_height(true)
-            .max_content_height(240)
+            .max_content_height(crate::platform::px(240.0))
             .build(),
     );
 
     let view = adw::ToolbarView::new();
     view.add_top_bar(&adw::HeaderBar::new());
     view.set_content(Some(&content));
-    let dialog = adw::Dialog::builder().title("Radial Menu").content_width(540).child(&view).build();
+    let dialog = adw::Dialog::builder()
+        .title("Radial Menu")
+        .content_width(crate::platform::px(540.0))
+        .child(&view)
+        .build();
     editor.layout();
     // The dialog's widgets only hold weak references; keep the editor
     // alive until it closes.

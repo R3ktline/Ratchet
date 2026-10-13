@@ -18,6 +18,8 @@ use crate::export_dialog;
 use crate::library::{Detached, Library, PageFile, Target};
 use crate::settings::ExportFormat;
 use crate::page_menu;
+use crate::platform;
+use crate::title_layout::TitleLayout;
 use crate::preferences::{self, Prefs};
 use crate::settings::{ActiveTool, RadialItem, Settings, Theme};
 use crate::toolbar::{self, ToolState, Toolbar};
@@ -149,8 +151,9 @@ impl Window {
         let window = adw::ApplicationWindow::builder()
             .application(app)
             .title("Ratchet")
-            .default_width(1280)
-            .default_height(800)
+            // Scaled like the rest of the UI, so the toolbar fits at first.
+            .default_width(platform::px(1280.0))
+            .default_height(platform::px(800.0))
             .width_request(360)
             .height_request(300)
             .build();
@@ -161,6 +164,7 @@ impl Window {
             eraser_mode: settings.eraser_mode,
             text_size: settings.text_size,
             text_font: settings.text_font.clone(),
+            show_text_tool: settings.show_text_tool,
         };
         let this = Rc::new_cyclic(|weak: &Weak<Window>| {
             let (w1, w2, w3) = (weak.clone(), weak.clone(), weak.clone());
@@ -203,11 +207,12 @@ impl Window {
                 .label("100%")
                 .tooltip_text("Reset Zoom (Ctrl+0)")
                 .action_name("win.zoom-reset")
-                .css_classes(["flat", "numeric"])
+                .css_classes(["flat", "numeric", "text-button"])
                 .build(),
             page_button: gtk::MenuButton::builder()
                 .icon_name("document-page-setup-symbolic")
                 .tooltip_text("Page Size and Background")
+                .css_classes(["flat"])
                 .build(),
             debug_flags: Default::default(),
             log_window: Default::default(),
@@ -235,7 +240,50 @@ impl Window {
         if let Some(msg) = load_error {
             this.toast(&msg);
         }
+        this.dev_show();
         this
+    }
+
+    /// Developer aid for reviewing the UI from screenshots without driving
+    /// the mouse: `RATCHET_SHOW=menu|page|export|prefs` opens that part of
+    /// the UI shortly after start.
+    fn dev_show(self: &Rc<Self>) {
+        let Ok(what) = std::env::var("RATCHET_SHOW") else { return };
+        let weak = self.weak();
+        glib::timeout_add_local_once(Duration::from_millis(1500), move || {
+            let this = upgrade!(weak);
+            match what.as_str() {
+                "page" => this.page_button.popup(),
+                "export" => {
+                    let _ = WidgetExt::activate_action(&this.window, "win.export-page", None);
+                }
+                "prefs" => {
+                    let _ = WidgetExt::activate_action(&this.window, "win.preferences", None);
+                }
+                "menu" => {
+                    fn find(w: &gtk::Widget) -> Option<gtk::MenuButton> {
+                        if let Some(b) = w.downcast_ref::<gtk::MenuButton>()
+                            && b.has_css_class("app-logo")
+                            && b.is_mapped()
+                        {
+                            return Some(b.clone());
+                        }
+                        let mut c = w.first_child();
+                        while let Some(x) = c {
+                            if let Some(b) = find(&x) {
+                                return Some(b);
+                            }
+                            c = x.next_sibling();
+                        }
+                        None
+                    }
+                    if let Some(b) = find(this.window.upcast_ref()) {
+                        b.popup();
+                    }
+                }
+                _ => {}
+            }
+        });
     }
 
     pub fn present(&self) {
@@ -280,17 +328,23 @@ impl Window {
         // The app logo doubles as the main menu button.
         // The app logo doubles as the main menu button.
         let logo_button = || {
-            gtk::MenuButton::builder()
+            let button = gtk::MenuButton::builder()
                 .icon_name("app.ratchet.notes-symbolic")
                 .menu_model(&main_menu)
                 .tooltip_text("Main Menu")
                 .css_classes(["app-logo"])
                 .primary(true)
-                .build()
+                .build();
+            // Open along the button's left edge, not centered on it (which
+            // runs off the window at the far left).
+            if let Some(popover) = button.popover() {
+                popover.set_halign(gtk::Align::Start);
+            }
+            button
         };
         let menu_button = logo_button();
 
-        let sidebar_header = adw::HeaderBar::new();
+        let sidebar_header = adw::HeaderBar::builder().css_classes(["rt-header"]).build();
         sidebar_header.set_title_widget(Some(&adw::WindowTitle::new("Ratchet", "")));
         sidebar_header.pack_start(&menu_button);
         sidebar_header.pack_end(&new_notebook);
@@ -315,41 +369,46 @@ impl Window {
             .tooltip_text("New Page (Ctrl+N)")
             .action_name("win.new-page-here")
             .build();
-        let content_header = adw::HeaderBar::new();
-        content_header.set_title_widget(Some(&self.title));
         // Shown while the sidebar (and its logo) is hidden.
         let content_logo = logo_button();
-        content_header.pack_start(&content_logo);
-        content_header.pack_start(&toggle_sidebar);
+        let start_controls = gtk::WindowControls::new(gtk::PackType::Start);
+        let end_controls = gtk::WindowControls::new(gtk::PackType::End);
         // The logo buttons take the place of the window icon some layouts
         // show, which is the fixed-color app icon.
         if let Some(settings) = gtk::Settings::default() {
             let sync = {
-                let headers = [sidebar_header.clone(), content_header.clone()];
+                let (sidebar_header, start, end) = (sidebar_header.clone(), start_controls.clone(), end_controls.clone());
                 move |settings: &gtk::Settings| {
                     let layout = without_icon(&settings.gtk_decoration_layout().unwrap_or_default());
-                    for header in &headers {
-                        header.set_decoration_layout(Some(&layout));
-                    }
+                    sidebar_header.set_decoration_layout(Some(&layout));
+                    start.set_decoration_layout(Some(&layout));
+                    end.set_decoration_layout(Some(&layout));
                 }
             };
             sync(&settings);
             settings.connect_gtk_decoration_layout_notify(sync);
         }
-        content_header.pack_start(&new_page);
         // Tools scroll sideways in the header instead of forcing a wide window.
         self.tools_scroller.set_child(Some(&self.toolbar.widget));
-        content_header.pack_start(&self.tools_scroller);
+        self.tools_scroller.set_hexpand(true);
+        self.toolbar.widget.set_halign(gtk::Align::Start);
+        // Export gets a labeled button of its own, apart from the view
+        // controls, so it's easy to find.
         let export = gtk::Button::builder()
-            .icon_name("document-save-as-symbolic")
+            .child(&adw::ButtonContent::builder().icon_name("send-to-symbolic").label("Export").build())
             .tooltip_text("Export Page (Ctrl+E)")
             .action_name("win.export-page")
+            .valign(gtk::Align::Center)
+            .css_classes(["rt-export"])
             .build();
         // Shown together with the other page controls.
         self.page_button.bind_property("visible", &export, "visible").sync_create().build();
-        content_header.pack_end(&export);
-        content_header.pack_end(&self.page_button);
-        content_header.pack_end(&self.zoom_button);
+        // Page view controls as one cluster, which hides along with them.
+        let page_group = gtk::Box::builder().css_classes(["rt-tool-group"]).valign(gtk::Align::Center).build();
+        for b in [self.zoom_button.upcast_ref::<gtk::Widget>(), self.page_button.upcast_ref()] {
+            page_group.append(b);
+        }
+        self.page_button.bind_property("visible", &page_group, "visible").sync_create().build();
         let weak = self.weak();
         self.page_button.set_create_popup_func(move |button| {
             let this = upgrade!(weak);
@@ -368,7 +427,7 @@ impl Window {
         let create_first = gtk::Button::builder()
             .label("New Notebook")
             .halign(gtk::Align::Center)
-            .css_classes(["pill", "suggested-action"])
+            .css_classes(["text-button", "pill", "suggested-action"])
             .action_name("win.new-notebook")
             .build();
         let empty = adw::StatusPage::builder()
@@ -388,7 +447,40 @@ impl Window {
             .tooltip_text("Fullscreen (F11)")
             .action_name("win.fullscreen")
             .build();
-        content_header.pack_end(&fullscreen);
+
+        // A bar of our own rather than an AdwHeaderBar (see TitleLayout).
+        for b in [content_logo.upcast_ref::<gtk::Widget>(), toggle_sidebar.upcast_ref(), new_page.upcast_ref(), fullscreen.upcast_ref()] {
+            b.add_css_class("flat");
+        }
+        let side = |children: &[&gtk::Widget]| {
+            let b = gtk::Box::builder().css_classes(["rt-bar-side"]).build();
+            for c in children {
+                b.append(*c);
+            }
+            b
+        };
+        let start = side(&[
+            start_controls.upcast_ref(),
+            content_logo.upcast_ref(),
+            toggle_sidebar.upcast_ref(),
+            new_page.upcast_ref(),
+            self.tools_scroller.upcast_ref(),
+        ]);
+        // Right side: history, page view, window.
+        let end = side(&[
+            self.toolbar.history.upcast_ref(),
+            page_group.upcast_ref(),
+            export.upcast_ref(),
+            fullscreen.upcast_ref(),
+            end_controls.upcast_ref(),
+        ]);
+        let bar = gtk::Box::builder().css_classes(["rt-bar"]).build();
+        bar.set_layout_manager(Some(TitleLayout::new((8.0 * platform::ui_scale()).round() as i32)));
+        bar.append(&start);
+        bar.append(&self.title);
+        bar.append(&end);
+        end_controls.bind_property("empty", &end_controls, "visible").invert_boolean().sync_create().build();
+        let content_header = gtk::WindowHandle::builder().child(&bar).build();
 
         let content = adw::ToolbarView::new();
         content.add_top_bar(&content_header);
@@ -405,16 +497,20 @@ impl Window {
             .build();
         split.bind_property("show-sidebar", &toggle_sidebar, "active").bidirectional().sync_create().build();
         split.bind_property("show-sidebar", &content_logo, "visible").invert_boolean().sync_create().build();
+        // Start-side window buttons live in the sidebar's header while it shows.
+        let sync_start = {
+            let start = start_controls.clone();
+            move |split: &adw::OverlaySplitView| start.set_visible(!start.is_empty() && !split.shows_sidebar())
+        };
+        sync_start(&split);
+        split.connect_show_sidebar_notify(sync_start.clone());
+        start_controls.connect_empty_notify(glib::clone!(
+            #[weak]
+            split,
+            move |_| sync_start(&split)
+        ));
         let _ = self.split.set(split.clone());
 
-        // Collapse the sidebar into an overlay on narrow windows.
-        let narrow = adw::Breakpoint::new(adw::BreakpointCondition::new_length(
-            adw::BreakpointConditionLengthType::MaxWidth,
-            600.0,
-            adw::LengthUnit::Sp,
-        ));
-        narrow.add_setter(&split, "collapsed", Some(&true.to_value()));
-        self.window.add_breakpoint(narrow);
 
         let toggle = gio::SimpleAction::new("toggle-sidebar", None);
         toggle.connect_activate(glib::clone!(
@@ -426,7 +522,23 @@ impl Window {
 
         self.toasts.set_child(Some(&split));
         self.window.set_content(Some(&self.toasts));
+        crate::ui::keep_icon_labels_aligned(&self.window);
         self.setup_fullscreen(&split, &content, &fullscreen);
+
+        // Never narrower than the bar's buttons. The sidebar turns into an
+        // overlay once a typical sidebar and the whole bar (all tools, full
+        // title) no longer fit side by side, so the bar is never what gets
+        // squeezed.
+        let scale = platform::ui_scale();
+        let (bar_min, bar_nat, _, _) = content_header.measure(gtk::Orientation::Horizontal, -1);
+        self.window.set_width_request(bar_min.max(360));
+        let narrow = adw::Breakpoint::new(adw::BreakpointCondition::new_length(
+            adw::BreakpointConditionLengthType::MaxWidth,
+            (bar_nat as f64 + 220.0 * scale).max(600.0),
+            adw::LengthUnit::Px,
+        ));
+        narrow.add_setter(&split, "collapsed", Some(&true.to_value()));
+        self.window.add_breakpoint(narrow);
 
         // This handler owns the strong reference that keeps `Window` alive
         // for as long as the GTK window exists; everything else holds weak refs.
@@ -567,7 +679,7 @@ impl Window {
                 }
                 for (s, sec) in nb.sections.iter().enumerate() {
                     let sec_open = st.expanded.contains(&format!("{}/{}", nb.dir, sec.dir));
-                    let row = self.make_row(1, Some(sec_open), None, &sec.name);
+                    let row = self.make_row(1, Some(sec_open), Some(&nb.color), &sec.name);
                     self.list.append(&row);
                     rows.push(Target::Section(n, s));
                     if !sec_open {
@@ -607,20 +719,24 @@ impl Window {
             }
             layout.pixel_size().0 as f64
         };
-        // Row margins (10 + 10), spacing 8, the list's own row inset (~12),
-        // and breathing room.
-        const CHROME: f64 = 10.0 + 10.0 + 12.0 + 20.0;
+        // Row margins (10 + 10), the list's own row inset (~12), the rows'
+        // side margins (6 + 6, style.css) and a little breathing room.
+        const CHROME: f64 = 10.0 + 10.0 + 12.0 + 12.0 + 6.0;
+        let s = platform::ui_scale();
         let mut widest: f64 = 0.0;
         for nb in &st.lib.notebooks {
-            widest = widest.max(10.0 + 8.0 + text_width(&nb.name, true));
+            widest = widest.max((10.0 + 8.0) * s + text_width(&nb.name, true));
             for sec in &nb.sections {
-                widest = widest.max(16.0 + 16.0 + 8.0 + text_width(&sec.name, false));
+                // Indent, chevron, tab and their spacing.
+                widest = widest.max((16.0 + 16.0 + 8.0 + 4.0 + 8.0) * s + text_width(&sec.name, false));
                 for page in &sec.pages {
-                    widest = widest.max(32.0 + 16.0 + 8.0 + text_width(&page.title, false));
+                    // Indent, spacer, page icon and their spacing.
+                    widest = widest.max((32.0 + 16.0 + 8.0 + 16.0 + 8.0) * s + text_width(&page.title, false));
                 }
             }
         }
-        let width = (widest + CHROME).clamp(200.0, 380.0);
+        // At least as wide as the sidebar's own header needs.
+        let width = (widest + CHROME * s).clamp(160.0 * s, 400.0 * s);
         split.set_min_sidebar_width(width);
         split.set_max_sidebar_width(width);
     }
@@ -632,37 +748,61 @@ impl Window {
         color: Option<&str>,
         label: &str,
     ) -> gtk::ListBoxRow {
-        let hbox = gtk::Box::builder().spacing(8).build();
+        let hbox = gtk::Box::builder().spacing((8.0 * platform::ui_scale()).round() as i32).build();
         match expanded {
             // Notebooks show only their color dot (arrows there are clutter).
             Some(_) if depth == 0 => {}
             Some(open) => {
                 let icon = if open { "pan-down-symbolic" } else { "pan-end-symbolic" };
-                hbox.append(&gtk::Image::from_icon_name(icon));
+                let chevron = gtk::Image::from_icon_name(icon);
+                chevron.add_css_class("rt-chevron");
+                hbox.append(&chevron);
             }
             // Align pages with their section's label.
-            None => hbox.append(&gtk::Box::builder().width_request(16).build()),
+            None => hbox.append(&gtk::Box::builder().width_request((16.0 * platform::ui_scale()).round() as i32).build()),
         }
-        if let Some(color) = color {
-            let dot = gtk::Box::builder()
-                .valign(gtk::Align::Center)
-                .css_classes(["nb-dot", &format!("nb-{color}")])
-                .build();
-            hbox.append(&dot);
+        match (depth, color) {
+            // Notebook: its color dot.
+            (0, Some(color)) => {
+                let dot = gtk::Box::builder()
+                    .valign(gtk::Align::Center)
+                    .css_classes(["nb-dot", &format!("nb-{color}")])
+                    .build();
+                hbox.append(&dot);
+            }
+            // Section: a OneNote-style tab in the notebook's color.
+            (1, Some(color)) => {
+                let tab = gtk::Box::builder()
+                    .height_request(platform::px(14.0))
+                    .valign(gtk::Align::Center)
+                    .css_classes(["rt-section-tab", &format!("nb-{color}")])
+                    .build();
+                hbox.append(&tab);
+            }
+            _ => {}
         }
-        hbox.append(
-            &gtk::Label::builder()
-                .label(label)
-                .xalign(0.0)
-                .hexpand(true)
-                .ellipsize(gtk::pango::EllipsizeMode::End)
-                .tooltip_text(label)
-                .build(),
-        );
-        hbox.set_margin_top(7);
-        hbox.set_margin_bottom(7);
-        hbox.set_margin_end(10);
-        hbox.set_margin_start(10 + depth * 16);
+        // Pages: a small page icon (Notion).
+        if depth == 2 {
+            let icon = gtk::Image::from_icon_name("x-office-document-symbolic");
+            icon.add_css_class("rt-page-icon");
+            hbox.append(&icon);
+        }
+        let text = gtk::Label::builder()
+            .label(label)
+            .xalign(0.0)
+            .hexpand(true)
+            .ellipsize(gtk::pango::EllipsizeMode::End)
+            .tooltip_text(label)
+            .build();
+        if depth == 1 {
+            text.add_css_class("rt-section-label");
+        }
+        hbox.append(&text);
+        let px = |v: f64| (v * platform::ui_scale()).round() as i32;
+        hbox.set_margin_top(px(7.0));
+        hbox.set_margin_bottom(px(7.0));
+        hbox.set_margin_end(px(10.0));
+        hbox.set_margin_start(px(10.0 + depth as f64 * 16.0));
         let revealer = gtk::Revealer::builder()
             .child(&hbox)
             .reveal_child(true)
@@ -1202,7 +1342,22 @@ impl Window {
         let current = self.state.borrow().settings.export.clone();
         let weak = self.weak();
         let file_name = crate::library::sanitize(&title);
-        export_dialog::show(&self.window, &format!("Export “{title}”"), &file_name, current, move |opts, path| {
+        let pages = match entries.len() {
+            1 => "1 page".to_string(),
+            n => format!("{n} pages"),
+        };
+        let detail = match target {
+            Target::Page(..) => "Page".to_string(),
+            Target::Section(..) => format!("Section · {pages}"),
+            Target::Notebook(..) => format!("Notebook · {pages}"),
+        };
+        let name = title.clone();
+        let subject = export_dialog::Subject {
+            name: &name,
+            detail: &detail,
+            has_infinite: entries.iter().any(|e| e.page.layout.size == crate::library::PageSize::Infinite),
+        };
+        export_dialog::show(&self.window, subject, &file_name, current, move |opts, path| {
             let this = upgrade!(weak);
             {
                 let mut st = this.state.borrow_mut();
@@ -1253,6 +1408,7 @@ impl Window {
 
     fn set_page_controls_visible(&self, visible: bool) {
         self.tools_scroller.set_visible(visible);
+        self.toolbar.history.set_visible(visible);
         self.zoom_button.set_visible(visible);
         self.page_button.set_visible(visible);
     }
@@ -1379,6 +1535,7 @@ impl Window {
             st.settings.eraser_mode = t.eraser_mode;
             st.settings.text_size = t.text_size;
             st.settings.text_font = t.text_font.clone();
+            st.settings.show_text_tool = t.show_text_tool;
             st.settings.save();
         }
         self.apply_tools();

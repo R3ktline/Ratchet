@@ -635,7 +635,8 @@ impl Canvas {
     // ---- rendering -------------------------------------------------------------
 
     fn page_color(dark: bool) -> (f32, f32, f32) {
-        if dark { (0.12, 0.12, 0.13) } else { (1.0, 1.0, 1.0) }
+        // Matches the window background in style.css (#191919 / white).
+        if dark { (0.098, 0.098, 0.098) } else { (1.0, 1.0, 1.0) }
     }
 
     /// Sheet rectangles (page units) for a sheets layout.
@@ -1577,6 +1578,12 @@ impl Canvas {
                 (true, gdk::Key::v) => canvas.paste(true),
                 (true, gdk::Key::d) => canvas.duplicate_selection(),
                 (true, gdk::Key::a) => canvas.select_all(),
+                // T picks the text tool (an open text box takes the key first).
+                (false, gdk::Key::t) => {
+                    if let Some(f) = canvas.imp().on_menu.borrow().as_ref() {
+                        f(RadialItem::Text);
+                    }
+                }
                 _ => return glib::Propagation::Proceed,
             }
             glib::Propagation::Stop

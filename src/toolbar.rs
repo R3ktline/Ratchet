@@ -14,7 +14,7 @@ use gtk::{gdk, gio, glib};
 use crate::canvas::{Action, TextCommand};
 use crate::text::TextSize;
 use crate::ink::{InkColor, Tool};
-use crate::glyphs::{draw_color, eraser_glyph, hand_glyph, select_glyph, slot_glyph};
+use crate::glyphs::{draw_color, eraser_glyph, hand_glyph, select_glyph, slot_glyph, text_glyph};
 use crate::settings::{ActiveTool, EraserMode, PenSlot};
 
 /// Colors offered in the slot editor.
@@ -49,10 +49,14 @@ pub struct ToolState {
     pub eraser_mode: EraserMode,
     pub text_size: TextSize,
     pub text_font: Option<String>,
+    pub show_text_tool: bool,
 }
 
 pub struct Toolbar {
     pub widget: gtk::Box,
+    /// Undo and redo, placed by the window (on the far side of the bar).
+    pub history: gtk::Box,
+    /// Pen and highlighter slots, in the order they were added.
     slots: gtk::Box,
     eraser: gtk::ToggleButton,
     select: gtk::ToggleButton,
@@ -101,8 +105,8 @@ fn swatch(color: InkColor, selected: bool) -> gtk::DrawingArea {
 
 impl Toolbar {
     pub fn new(state: ToolState, callbacks: Callbacks) -> Rc<Self> {
-        let widget = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-        let slots = gtk::Box::new(gtk::Orientation::Horizontal, 2);
+        let widget = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        let slots = gtk::Box::builder().css_classes(["rt-slots"]).build();
         let eraser = gtk::ToggleButton::builder()
             .child(&eraser_glyph())
             .tooltip_text("Eraser (click again for options)")
@@ -115,19 +119,26 @@ impl Toolbar {
             .group(&eraser)
             .build();
 
+        // Adds pens and highlighters (they tile after the first pen) and
+        // turns on optional tools.
         let add_menu = gio::Menu::new();
-        add_menu.append(Some("Add Pen"), Some("tools.add::pen"));
-        add_menu.append(Some("Add Highlighter"), Some("tools.add::highlighter"));
+        let add_slots = gio::Menu::new();
+        add_slots.append(Some("Pen"), Some("tools.add::pen"));
+        add_slots.append(Some("Highlighter"), Some("tools.add::highlighter"));
+        add_menu.append_section(None, &add_slots);
+        let extra = gio::Menu::new();
+        extra.append(Some("Text Tool"), Some("tools.show-text"));
+        add_menu.append_section(None, &extra);
         let add = gtk::MenuButton::builder()
             .icon_name("list-add-symbolic")
-            .tooltip_text("Add Pen")
+            .tooltip_text("Add Tool")
             .menu_model(&add_menu)
-            .css_classes(["flat"])
+            .css_classes(["flat", "rt-add"])
             .build();
 
         let text = gtk::ToggleButton::builder()
-            .icon_name("insert-text-symbolic")
-            .tooltip_text("Text — click to type, drag to set a width; $…$ for math")
+            .child(&text_glyph())
+            .tooltip_text("Text (T) — click to type, drag to set a width; $…$ for math")
             .css_classes(["flat"])
             .group(&eraser)
             .build();
@@ -154,7 +165,7 @@ impl Toolbar {
         if let Some(f) = &state.text_font {
             font.set_font_desc(&gtk::pango::FontDescription::from_string(f));
         }
-        let text_box = gtk::Box::new(gtk::Orientation::Horizontal, 2);
+        let text_box = gtk::Box::builder().css_classes(["rt-tool-group"]).valign(gtk::Align::Center).build();
         text_box.append(&size);
         text_box.append(&font);
         let style_buttons: Vec<(gtk::Button, TextCommand)> = [
@@ -185,27 +196,47 @@ impl Toolbar {
             .icon_name("edit-undo-symbolic")
             .tooltip_text("Undo (Ctrl+Z)")
             .action_name("win.undo")
+            .css_classes(["flat"])
             .build();
         let redo = gtk::Button::builder()
             .icon_name("edit-redo-symbolic")
             .tooltip_text("Redo (Ctrl+Shift+Z)")
             .action_name("win.redo")
+            .css_classes(["flat"])
             .build();
 
-        widget.append(&slots);
-        widget.append(&add);
-        widget.append(&gtk::Separator::new(gtk::Orientation::Vertical));
-        widget.append(&eraser);
-        widget.append(&select);
-        widget.append(&text);
+        // One cluster: the pens, then eraser, select and pan (and text when
+        // turned on), then "+"; text options follow while typing. History
+        // goes wherever the window puts it.
+        let group = |children: &[&gtk::Widget]| {
+            let b = gtk::Box::builder().css_classes(["rt-tool-group"]).valign(gtk::Align::Center).build();
+            for c in children {
+                b.append(*c);
+            }
+            b
+        };
+        let divider = gtk::Separator::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .margin_top(crate::platform::px(6.0))
+            .margin_bottom(crate::platform::px(6.0))
+            .build();
+        text.set_visible(state.show_text_tool);
+        widget.add_css_class("rt-toolbar");
+        widget.append(&group(&[
+            slots.upcast_ref(),
+            divider.upcast_ref(),
+            eraser.upcast_ref(),
+            select.upcast_ref(),
+            hand.upcast_ref(),
+            text.upcast_ref(),
+            add.upcast_ref(),
+        ]));
         widget.append(&text_options);
-        widget.append(&hand);
-        widget.append(&gtk::Separator::new(gtk::Orientation::Vertical));
-        widget.append(&undo);
-        widget.append(&redo);
+        let history = group(&[undo.upcast_ref(), redo.upcast_ref()]);
 
         let this = Rc::new(Toolbar {
             widget,
+            history,
             slots,
             eraser,
             select,
@@ -248,6 +279,20 @@ impl Toolbar {
             this.edit_slot(index);
         });
         group.add_action(&add_action);
+        let show_text = gio::SimpleAction::new_stateful("show-text", None, &this.state.borrow().show_text_tool.to_variant());
+        let weak = Rc::downgrade(&this);
+        show_text.connect_activate(move |action, _| {
+            let Some(this) = weak.upgrade() else { return };
+            let show = !action.state().and_then(|v| v.get::<bool>()).unwrap_or(false);
+            action.set_state(&show.to_variant());
+            this.text.set_visible(show);
+            this.state.borrow_mut().show_text_tool = show;
+            if !show && this.text.is_active() {
+                this.select_tool(ActiveTool::Slot(0));
+            }
+            this.changed();
+        });
+        group.add_action(&show_text);
         this.widget.insert_action_group("tools", Some(&group));
 
         let weak = Rc::downgrade(&this);
@@ -351,7 +396,13 @@ impl Toolbar {
             }
             ActiveTool::Eraser => self.eraser.set_active(true),
             ActiveTool::Select => self.select.set_active(true),
-            ActiveTool::Text => self.text.set_active(true),
+            ActiveTool::Text => {
+                // Picking text (T key, radial menu) shows its button too.
+                if !self.text.is_visible() {
+                    let _ = self.widget.activate_action("tools.show-text", None);
+                }
+                self.text.set_active(true);
+            }
             ActiveTool::Hand => self.hand.set_active(true),
         }
         // Not a click on an already active button: never open an editor.
@@ -489,17 +540,14 @@ impl Toolbar {
 
         let content = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
-            .spacing(12)
-            .margin_top(6)
-            .margin_bottom(6)
-            .margin_start(6)
-            .margin_end(6)
+            .spacing(crate::platform::px(12.0))
+            .css_classes(["rt-popover"])
             .build();
 
-        // Colors
+        // Colors, then the custom color picker as the last swatch.
         let colors = gtk::FlowBox::builder()
-            .max_children_per_line(6)
-            .min_children_per_line(6)
+            .max_children_per_line(7)
+            .min_children_per_line(7)
             .selection_mode(gtk::SelectionMode::None)
             .homogeneous(true)
             .build();
@@ -528,9 +576,14 @@ impl Toolbar {
             swatch_buttons.borrow_mut().push((color, b.clone()));
             colors.append(&b);
         }
+        let custom = gtk::Button::builder()
+            .icon_name("color-select-symbolic")
+            .tooltip_text("Custom Color")
+            .css_classes(["flat", "circular"])
+            .build();
+        colors.append(&custom);
         content.append(&colors);
 
-        let custom = gtk::Button::with_label("Custom Color…");
         let weak = Rc::downgrade(self);
         let refresh = refresh_swatches.clone();
         let pop = popover.clone();
@@ -552,7 +605,6 @@ impl Toolbar {
                 refresh(color);
             });
         });
-        content.append(&custom);
 
         // Width: presets + slider
         let presets = PenSlot::presets(slot.tool);
@@ -560,7 +612,7 @@ impl Toolbar {
         let scale = gtk::Scale::with_range(gtk::Orientation::Horizontal, lo, hi, 0.05);
         scale.set_value(slot.width_mm as f64);
         scale.set_hexpand(true);
-        scale.set_width_request(180);
+        scale.set_width_request(crate::platform::px(180.0));
         let value_label = gtk::Label::new(Some(&format!("{:.2} mm", slot.width_mm)));
         value_label.set_width_chars(8);
 
@@ -593,17 +645,19 @@ impl Toolbar {
             }
             this.update_slot(index, |slot| slot.width_mm = mm);
         });
-        let width_row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-        width_row.append(&scale);
-        width_row.append(&value_label);
-        content.append(&width_row);
-
-        // Remove
+        // Width slider, then remove at the end of the row.
         let remove = gtk::Button::builder()
-            .label("Remove")
-            .css_classes(["destructive-action"])
+            .icon_name("user-trash-symbolic")
+            .tooltip_text("Remove")
+            .css_classes(["flat"])
             .sensitive(self.state.borrow().pens.len() > 1)
             .build();
+        let width_row = gtk::Box::new(gtk::Orientation::Horizontal, crate::platform::px(6.0));
+        width_row.append(&scale);
+        width_row.append(&value_label);
+        width_row.append(&remove);
+        content.append(&width_row);
+
         let weak: Weak<Self> = Rc::downgrade(self);
         let pop = popover.clone();
         remove.connect_clicked(move |_| {
@@ -621,7 +675,6 @@ impl Toolbar {
             this.rebuild();
             this.changed();
         });
-        content.append(&remove);
 
         popover.set_child(Some(&content));
         popover.popup();
@@ -634,37 +687,19 @@ impl Toolbar {
             let p = p.clone();
             glib::idle_add_local_once(move || p.unparent());
         });
-        let content = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(6)
-            .margin_top(6)
-            .margin_bottom(6)
-            .margin_start(6)
-            .margin_end(6)
-            .build();
         let mode = self.state.borrow().eraser_mode;
-        let whole = gtk::CheckButton::builder()
-            .label("Stroke eraser — removes whole strokes")
-            .active(mode == EraserMode::Stroke)
-            .build();
-        let partial = gtk::CheckButton::builder()
-            .label("Partial eraser — cuts where it passes")
-            .active(mode == EraserMode::Partial)
-            .group(&whole)
-            .build();
-        for (button, mode) in [(&whole, EraserMode::Stroke), (&partial, EraserMode::Partial)] {
-            let weak = Rc::downgrade(self);
-            button.connect_toggled(move |b| {
-                let Some(this) = weak.upgrade() else { return };
-                if b.is_active() {
-                    this.state.borrow_mut().eraser_mode = mode;
-                    this.changed();
-                }
-            });
-        }
-        content.append(&whole);
-        content.append(&partial);
-        popover.set_child(Some(&content));
+        let modes = adw::ToggleGroup::builder().homogeneous(true).css_classes(["rt-popover"]).build();
+        modes.add(adw::Toggle::builder().name("stroke").label("Whole Stroke").tooltip("Removes the strokes you touch").build());
+        modes.add(adw::Toggle::builder().name("partial").label("Partial").tooltip("Erases only where it passes").build());
+        modes.set_active_name(Some(if mode == EraserMode::Partial { "partial" } else { "stroke" }));
+        let weak = Rc::downgrade(self);
+        modes.connect_active_name_notify(move |g| {
+            let Some(this) = weak.upgrade() else { return };
+            this.state.borrow_mut().eraser_mode =
+                if g.active_name().as_deref() == Some("partial") { EraserMode::Partial } else { EraserMode::Stroke };
+            this.changed();
+        });
+        popover.set_child(Some(&modes));
         popover.popup();
     }
 }

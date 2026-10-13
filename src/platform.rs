@@ -4,22 +4,120 @@ use gtk::gdk;
 
 /// GTK on Windows only supports whole-number scales: at 150% display
 /// scaling it renders at 1x and everything looks two thirds the size it
-/// would on Linux. Make up the fractional part by scaling fonts and icons.
+/// would on Linux. This is the fractional part GTK leaves out, which the
+/// app makes up by scaling fonts, icons and its own sizes (1 elsewhere).
 /// `RATCHET_UI_SCALE` overrides the factor (1 turns this off).
 #[cfg(windows)]
+pub fn ui_scale() -> f64 {
+    static SCALE: std::sync::OnceLock<f64> = std::sync::OnceLock::new();
+    *SCALE.get_or_init(|| {
+        let factor = std::env::var("RATCHET_UI_SCALE")
+            .ok()
+            .and_then(|s| s.trim().parse::<f64>().ok())
+            .filter(|f| (0.5..=4.0).contains(f))
+            .unwrap_or_else(|| {
+                // SAFETY: no arguments; available since Windows 10 1607.
+                let dpi = unsafe { win32::GetDpiForSystem() } as f64;
+                // What GDK uses: the integer part of the scale, at least 1.
+                let gdk_scale = (dpi / 96.0).floor().max(1.0);
+                dpi / 96.0 / gdk_scale
+            });
+        if factor <= 1.01 { 1.0 } else { factor }
+    })
+}
+
+#[cfg(not(windows))]
+pub fn ui_scale() -> f64 {
+    1.0
+}
+
+/// A size in pixels at the UI scale, for widths and heights set in code
+/// (fonts and icons grow with the scale, so fixed boxes must too).
+pub fn px(v: f64) -> i32 {
+    (v * ui_scale()).round() as i32
+}
+
+/// Before GTK starts: on Windows, GTK only draws with the GPU (GL or
+/// Vulkan) through Direct Composition, which is opt-in; without it every
+/// frame is drawn in software and animations stutter. Turn it on unless the
+/// user set GDK_DEBUG themselves (`GDK_DEBUG=` with nothing turns it off).
+#[cfg(windows)]
+pub fn early_setup() {
+    if std::env::var_os("GDK_DEBUG").is_none() {
+        // SAFETY: called first thing in main, before any other thread runs.
+        unsafe { std::env::set_var("GDK_DEBUG", "dcomp") };
+    }
+}
+
+#[cfg(not(windows))]
+pub fn early_setup() {}
+
+/// With Direct Composition (see `early_setup`), GTK's Windows backend draws
+/// see-through pixels as black: window and popover shadows, rounded
+/// corners and popover arrows turn into black boxes. Draw nothing
+/// see-through instead. The window keeps a 12px border around it for
+/// resizing whatever the CSS says (libadwaita's window can't use the native
+/// frame), so fill it with the window color and a hairline edge: a slim
+/// frame instead of a black one. Popovers get a hairline border and no
+/// arrow tail; corners are square.
+#[cfg(windows)]
+const NO_TRANSPARENCY_CSS: &str = "
+window.csd, window.csd:backdrop {
+  box-shadow: 0 0 0 12px var(--window-bg-color), 0 0 0 13px var(--border-color);
+  margin: 0; border-radius: 0;
+}
+window.csd > .titlebar, window.csd headerbar { border-radius: 0; }
+popover.background, popover.menu { box-shadow: none; margin: 0; padding: 0; }
+popover > contents { box-shadow: none; border-radius: 0; border: 1px solid alpha(currentColor, 0.18); }
+popover > arrow { background: none; border: none; }
+tooltip.background { box-shadow: none; border-radius: 0; }
+";
+
+/// Popover arrows sit in a see-through strip, which turns black (see
+/// `NO_TRANSPARENCY_CSS`). CSS can't remove them, so switch the arrow off
+/// on every popover as it is shown, wherever it comes from (our menus,
+/// dropdowns and combo rows inside libadwaita, …).
+#[cfg(windows)]
+fn hide_popover_arrows() {
+    use gtk::glib::gobject_ffi;
+    use gtk::glib::translate::{from_glib_none, IntoGlib};
+    use gtk::prelude::*;
+
+    unsafe extern "C" fn on_show(
+        _hint: *mut gobject_ffi::GSignalInvocationHint,
+        n_values: u32,
+        values: *const gobject_ffi::GValue,
+        _data: gtk::glib::ffi::gpointer,
+    ) -> gtk::glib::ffi::gboolean {
+        if n_values > 0 {
+            // SAFETY: the first value of a signal emission is the instance.
+            let obj: Option<gtk::glib::Object> = unsafe { from_glib_none(gobject_ffi::g_value_get_object(values)) };
+            if let Some(popover) = obj.and_then(|o| o.downcast::<gtk::Popover>().ok()) {
+                popover.set_has_arrow(false);
+            }
+        }
+        gtk::glib::ffi::GTRUE // keep the hook
+    }
+
+    // Signals exist once the class is set up, which may not have happened yet.
+    let _class = gtk::glib::Class::<gtk::Popover>::from_type(gtk::Popover::static_type());
+    let Some(show) = gtk::glib::subclass::signal::SignalId::lookup("show", gtk::Widget::static_type()) else { return };
+    // SAFETY: a plain function hook with no data, kept for the app's life.
+    unsafe {
+        gobject_ffi::g_signal_add_emission_hook(show.into_glib(), 0, Some(on_show), std::ptr::null_mut(), None);
+    }
+}
+
+#[cfg(windows)]
 pub fn setup() {
-    let factor = std::env::var("RATCHET_UI_SCALE")
-        .ok()
-        .and_then(|s| s.trim().parse::<f64>().ok())
-        .filter(|f| (0.5..=4.0).contains(f))
-        .unwrap_or_else(|| {
-            // SAFETY: no arguments; available since Windows 10 1607.
-            let dpi = unsafe { win32::GetDpiForSystem() } as f64;
-            // What GDK uses: the integer part of the scale, at least 1.
-            let gdk_scale = (dpi / 96.0).floor().max(1.0);
-            dpi / 96.0 / gdk_scale
-        });
-    if factor <= 1.01 {
+    if let Some(display) = gdk::Display::default() {
+        let provider = gtk::CssProvider::new();
+        provider.load_from_string(NO_TRANSPARENCY_CSS);
+        gtk::style_context_add_provider_for_display(&display, &provider, gtk::STYLE_PROVIDER_PRIORITY_APPLICATION + 3);
+    }
+    hide_popover_arrows();
+    let factor = ui_scale();
+    if factor <= 1.0 {
         return;
     }
     // The Windows backend ignores gtk-xft-dpi, so scale the font size.
