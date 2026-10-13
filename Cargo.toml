@@ -2,6 +2,7 @@
 name = "ratchet"
 version = "0.1.0"
 edition = "2024"
+license = "CC-BY-NC-SA-4.0"
 
 [dependencies]
 ab_glyph = "0.2"

@@ -211,3 +211,15 @@ On Windows (MSYS2 shell), use the same command. In PowerShell:
 cargo test
 cargo clippy
 ```
+
+## License
+
+Ratchet is licensed under
+[Creative Commons Attribution-NonCommercial-ShareAlike 4.0](LICENSE)
+(CC BY-NC-SA 4.0). In short:
+
+- You may use, share and modify it for **non-commercial** purposes.
+- You must give credit and link back to this project.
+- If you share a modified version, it must use the **same license**.
+
+Commercial use is not permitted. See [LICENSE](LICENSE) for the full terms.
