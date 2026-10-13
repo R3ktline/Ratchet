@@ -52,8 +52,33 @@ pub fn align_icon_labels(root: &impl IsA<gtk::Widget>) {
     walk(root.upcast_ref());
 }
 
-/// `align_icon_labels` now and each time the widget is shown.
+/// Whether a popover (menu, dropdown, editor) under `root` is open.
+pub fn has_open_popover(root: &impl IsA<gtk::Widget>) -> bool {
+    fn walk(w: &gtk::Widget) -> bool {
+        if w.is::<gtk::Popover>() && w.is_visible() {
+            return true;
+        }
+        let mut child = w.first_child();
+        while let Some(c) = child {
+            if walk(&c) {
+                return true;
+            }
+            child = c.next_sibling();
+        }
+        false
+    }
+    walk(root.upcast_ref())
+}
+
+/// `align_icon_labels` now and again the first time the widget is shown
+/// (fonts are final then). Not on every showing: walking a whole dialog
+/// costs time just as its opening animation starts.
 pub fn keep_icon_labels_aligned(root: &impl IsA<gtk::Widget>) {
     align_icon_labels(root);
-    root.connect_map(|w| align_icon_labels(w));
+    let done = std::cell::Cell::new(false);
+    root.connect_map(move |w| {
+        if !done.replace(true) {
+            align_icon_labels(w);
+        }
+    });
 }

@@ -65,8 +65,16 @@ fn icon_row<R: IsA<adw::ActionRow>>(row: R, icon: &str) -> R {
     row
 }
 
-/// Show the preferences; `changed` runs with the new values on every edit.
-pub fn show(parent: &impl IsA<gtk::Widget>, current: Prefs, pens: &[PenSlot], changed: impl Fn(&Prefs) + 'static) {
+/// Build the preferences dialog once, to present as often as needed
+/// (building it takes long enough to stall the opening animation).
+/// `changed` runs with the new values on every edit. `live` gives the
+/// current pens and radial menu items, which can change elsewhere (removing
+/// a pen) while the dialog is closed; they're read again each time it opens.
+pub fn build(
+    current: Prefs,
+    live: impl Fn() -> (Vec<PenSlot>, Vec<RadialItem>) + 'static,
+    changed: impl Fn(&Prefs) + 'static,
+) -> adw::Dialog {
     // Ink
     let smoothing = adw::ComboRow::builder()
         .title("Smoothing")
@@ -197,14 +205,22 @@ pub fn show(parent: &impl IsA<gtk::Widget>, current: Prefs, pens: &[PenSlot], ch
         time.connect_value_notify(move |_| emit());
     }
 
-    let pens = pens.to_vec();
+    let pens: Rc<RefCell<Vec<PenSlot>>> = Rc::default();
+    {
+        let (pens, items) = (pens.clone(), radial_items.clone());
+        dialog.connect_map(move |_| {
+            let (p, i) = live();
+            *pens.borrow_mut() = p;
+            *items.borrow_mut() = i;
+        });
+    }
     let d = dialog.clone();
     customize.connect_activated(move |_| {
         let (items, emit) = (radial_items.clone(), emit.clone());
-        radial_editor::show(&d, radial_items.borrow().clone(), pens.clone(), move |new| {
+        radial_editor::show(&d, radial_items.borrow().clone(), pens.borrow().clone(), move |new| {
             *items.borrow_mut() = new.to_vec();
             emit();
         });
     });
-    dialog.present(Some(parent));
+    dialog
 }

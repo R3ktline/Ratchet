@@ -76,6 +76,9 @@ pub struct Window {
     debug_flags: std::cell::Cell<DebugFlags>,
     log_window: std::cell::OnceCell<LogWindow>,
     split: std::cell::OnceCell<adw::OverlaySplitView>,
+    /// Built once (ahead of time, when idle) and reused: building it on
+    /// every open stalled the opening animation.
+    prefs_dialog: std::cell::OnceCell<adw::Dialog>,
     state: RefCell<State>,
 }
 
@@ -217,6 +220,7 @@ impl Window {
             debug_flags: Default::default(),
             log_window: Default::default(),
             split: Default::default(),
+            prefs_dialog: Default::default(),
             state: RefCell::new(State {
                 lib,
                 settings,
@@ -241,12 +245,71 @@ impl Window {
             this.toast(&msg);
         }
         this.dev_show();
+        // Build the preferences ahead of time, once the window is up, so
+        // opening them doesn't stall.
+        let weak = this.weak();
+        glib::timeout_add_local_once(Duration::from_millis(800), move || {
+            if let Some(this) = weak.upgrade() {
+                this.preferences_dialog();
+            }
+        });
         this
     }
 
+    /// `RATCHET_SHOW=perf…`: run `step` six times (e.g. open and close the
+    /// sidebar or a dialog), then print the renderer and the time between
+    /// frames (how smooth the animations were) to stderr and quit.
+    fn perf_probe(self: &Rc<Self>, step_fn: Box<dyn Fn(u32)>) {
+        let renderer = self.window.renderer().map(|r| r.type_().name().to_string()).unwrap_or_default();
+        let gaps: Rc<RefCell<Vec<f64>>> = Rc::default();
+        // When the last step ran, and which, to place slow frames.
+        let stepped = Rc::new(std::cell::Cell::new((std::time::Instant::now(), 0u32)));
+        {
+            let (gaps, stepped) = (gaps.clone(), stepped.clone());
+            let last = std::cell::Cell::new(0i64);
+            self.window.add_tick_callback(move |_, clock| {
+                let t = clock.frame_time();
+                if last.get() != 0 {
+                    let gap = (t - last.get()) as f64 / 1000.0;
+                    gaps.borrow_mut().push(gap);
+                    let (at, n) = stepped.get();
+                    if gap > 17.0 && n > 0 {
+                        eprintln!("PERF slow frame {gap:.1}ms, {:.0}ms after step {n}", at.elapsed().as_secs_f64() * 1000.0);
+                    }
+                }
+                last.set(t);
+                glib::ControlFlow::Continue
+            });
+        }
+        let step = std::cell::Cell::new(0);
+        glib::timeout_add_local(Duration::from_millis(700), move || {
+            step.set(step.get() + 1);
+            if step.get() <= 6 {
+                if step.get() == 1 {
+                    gaps.borrow_mut().clear();
+                }
+                stepped.set((std::time::Instant::now(), step.get()));
+                step_fn(step.get());
+                return glib::ControlFlow::Continue;
+            }
+            let mut g = gaps.borrow().clone();
+            g.sort_by(f64::total_cmp);
+            let pct = |p: usize| g.get(g.len() * p / 100).copied().unwrap_or(0.0);
+            let slow = g.iter().filter(|&&x| x > 17.0).count();
+            eprintln!(
+                "PERF renderer={renderer} frames={} median={:.1}ms p95={:.1}ms max={:.1}ms over-16.7ms={slow}",
+                g.len(),
+                pct(50),
+                pct(95),
+                g.last().copied().unwrap_or(0.0)
+            );
+            std::process::exit(0);
+        });
+    }
+
     /// Developer aid for reviewing the UI from screenshots without driving
-    /// the mouse: `RATCHET_SHOW=menu|page|export|prefs` opens that part of
-    /// the UI shortly after start.
+    /// the mouse: `RATCHET_SHOW=menu|page|export|prefs|fullscreen-menu|perf`
+    /// opens that part of the UI (or runs that check) shortly after start.
     fn dev_show(self: &Rc<Self>) {
         let Ok(what) = std::env::var("RATCHET_SHOW") else { return };
         let weak = self.weak();
@@ -254,6 +317,55 @@ impl Window {
             let this = upgrade!(weak);
             match what.as_str() {
                 "page" => this.page_button.popup(),
+                // Slide the sidebar a few times, print frame times, quit.
+                "perf" => {
+                    let split = this.split.get().cloned();
+                    this.perf_probe(Box::new(move |_| {
+                        if let Some(s) = &split {
+                            s.set_show_sidebar(!s.shows_sidebar());
+                        }
+                    }));
+                }
+                // The same without the canvas, to see what it costs.
+                "perf-blank" => {
+                    this.stack.set_visible_child_name("empty");
+                    let split = this.split.get().cloned();
+                    this.perf_probe(Box::new(move |_| {
+                        if let Some(s) = &split {
+                            s.set_show_sidebar(!s.shows_sidebar());
+                        }
+                    }));
+                }
+                // Open and close a dialog.
+                "perf-export" | "perf-prefs" => {
+                    let action = if what == "perf-export" { "win.export-page" } else { "win.preferences" };
+                    let window = this.window.clone();
+                    this.perf_probe(Box::new(move |step| {
+                        if step % 2 == 1 {
+                            let _ = WidgetExt::activate_action(&window, action, None);
+                        } else if let Some(d) = window.visible_dialog() {
+                            d.close();
+                        }
+                    }));
+                }
+                // Fullscreen, then open and close the page menu a few times.
+                "fullscreen-menu" => {
+                    this.window.fullscreen();
+                    let n = Rc::new(std::cell::Cell::new(0));
+                    let b = this.page_button.clone();
+                    glib::timeout_add_local(Duration::from_millis(800), move || {
+                        n.set(n.get() + 1);
+                        if n.get() > 8 {
+                            return glib::ControlFlow::Break;
+                        }
+                        if n.get() % 2 == 1 {
+                            b.popup();
+                        } else {
+                            b.popdown();
+                        }
+                        glib::ControlFlow::Continue
+                    });
+                }
                 "export" => {
                     let _ = WidgetExt::activate_action(&this.window, "win.export-page", None);
                 }
@@ -1253,8 +1365,14 @@ impl Window {
                     (content.clone(), window.clone(), last_y.clone(), hide_timer.clone());
                 let id = glib::timeout_add_local_once(Duration::from_millis(900), move || {
                     timer.take();
-                    // Only hide if the pointer is still away from the header.
-                    if window.is_fullscreen() && last_y.get() > content.top_bar_height() as f64 + 24.0 {
+                    // Only hide if the pointer is still away from the header,
+                    // and no menu from it is open: menus hang below the
+                    // header, so pointing into one looked like leaving it,
+                    // and hiding took the menu along (flicker).
+                    if window.is_fullscreen()
+                        && last_y.get() > content.top_bar_height() as f64 + 24.0
+                        && !crate::ui::has_open_popover(&content)
+                    {
                         content.set_reveal_top_bars(false);
                     }
                 });
@@ -1606,23 +1724,37 @@ impl Window {
     }
 
     fn preferences(self: &Rc<Self>) {
-        let (current, pens) = {
+        self.preferences_dialog().present(Some(&self.window));
+    }
+
+    /// The preferences dialog, built on first use.
+    fn preferences_dialog(self: &Rc<Self>) -> &adw::Dialog {
+        self.prefs_dialog.get_or_init(|| self.build_preferences())
+    }
+
+    fn build_preferences(self: &Rc<Self>) -> adw::Dialog {
+        let current = {
             let s = &self.state.borrow().settings;
-            (
-                Prefs {
-                    smoothing: s.smoothing,
-                    button_2: s.pen_button_2,
-                    button_3: s.pen_button_3,
-                    eraser: s.pen_eraser,
-                    long_press_ms: s.long_press_ms,
-                    shape_hold_ms: s.shape_hold_ms,
-                    radial_items: s.radial_items.clone(),
-                },
-                s.pens.clone(),
-            )
+            Prefs {
+                smoothing: s.smoothing,
+                button_2: s.pen_button_2,
+                button_3: s.pen_button_3,
+                eraser: s.pen_eraser,
+                long_press_ms: s.long_press_ms,
+                shape_hold_ms: s.shape_hold_ms,
+                radial_items: s.radial_items.clone(),
+            }
+        };
+        let live = {
+            let weak = self.weak();
+            move || {
+                let Some(this) = weak.upgrade() else { return Default::default() };
+                let s = &this.state.borrow().settings;
+                (s.pens.clone(), s.radial_items.clone())
+            }
         };
         let weak = self.weak();
-        preferences::show(&self.window, current, &pens, move |p| {
+        preferences::build(current, live, move |p| {
             let this = upgrade!(weak);
             {
                 let mut st = this.state.borrow_mut();
@@ -1637,7 +1769,7 @@ impl Window {
                 s.save();
             }
             this.apply_tools();
-        });
+        })
     }
 
     /// After a rename or move, point the canvas at the open page's new file

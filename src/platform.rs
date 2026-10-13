@@ -38,12 +38,13 @@ pub fn px(v: f64) -> i32 {
 }
 
 /// Before GTK starts: on Windows, GTK only draws with the GPU (GL or
-/// Vulkan) through Direct Composition, which is opt-in; without it every
-/// frame is drawn in software and animations stutter. Turn it on unless the
-/// user set GDK_DEBUG themselves (`GDK_DEBUG=` with nothing turns it off).
+/// Vulkan) through Direct Composition, which is opt-in. The app is kept
+/// cheap enough to animate smoothly in software (see NO_TRANSPARENCY_CSS),
+/// and the GPU path can flicker in fullscreen on hybrid-GPU laptops, so
+/// software is the default; `RATCHET_GPU=1` turns the GPU path on.
 #[cfg(windows)]
 pub fn early_setup() {
-    if std::env::var_os("GDK_DEBUG").is_none() {
+    if std::env::var_os("GDK_DEBUG").is_none() && std::env::var_os("RATCHET_GPU").is_some() {
         // SAFETY: called first thing in main, before any other thread runs.
         unsafe { std::env::set_var("GDK_DEBUG", "dcomp") };
     }
@@ -71,6 +72,13 @@ popover.background, popover.menu { box-shadow: none; margin: 0; padding: 0; }
 popover > contents { box-shadow: none; border-radius: 0; border: 1px solid alpha(currentColor, 0.18); }
 popover > arrow { background: none; border: none; }
 tooltip.background { box-shadow: none; border-radius: 0; }
+/* Dialogs: a blurred shadow and a fading backdrop meant software rendering
+   repainted the whole window and re-blurred the shadow on every frame of
+   the opening animation (~70ms a frame). A hairline border and a backdrop
+   that appears at once cost almost nothing. */
+floating-sheet > sheet, bottom-sheet > sheet { box-shadow: 0 0 0 1px var(--border-color); }
+floating-sheet > dimming, bottom-sheet > dimming { background: none; }
+floating-sheet, bottom-sheet { background: alpha(black, 0.28); }
 ";
 
 /// Popover arrows sit in a see-through strip, which turns black (see
