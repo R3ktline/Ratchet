@@ -1,0 +1,4 @@
+# Shell scripts must keep LF endings, also in Windows checkouts (bash
+# fails on CRLF).
+*.sh text eol=lf
+packaging/linux/AppRun text eol=lf

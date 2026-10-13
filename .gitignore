@@ -1,4 +1,5 @@
 /target
+/*.AppImage
 
 # Personal Claude Code settings
 .claude/settings.local.json

@@ -1,3 +1,7 @@
+// No console window next to the app in Windows release builds; debug builds
+// keep it so stderr output stays visible.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod canvas;
 mod debug;
 mod export;

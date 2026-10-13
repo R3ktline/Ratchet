@@ -10,8 +10,7 @@
 A pen-first note-taking app for drawing tablets and 2-in-1s, built with GTK 4,
 libadwaita and Rust.
 
-> **Status:** early (v0.1.0). Developed on Linux (Wayland), with experimental
-> support for Windows.
+> **Status:** v1.0.0. Developed on Linux (Wayland) and Windows.
 
 ## Features
 
@@ -43,6 +42,30 @@ Notes are plain folders and JSON files, so you can sync them with any tool
 You can pick a different folder from the main menu. App settings are stored
 in `~/.config/ratchet/settings.json` on Linux and
 `%LOCALAPPDATA%\ratchet\settings.json` on Windows.
+
+---
+
+## Install
+
+Download the latest version from the
+[releases page](https://github.com/R3ktline/Ratchet/releases/latest).
+
+**Linux:** get `Ratchet-<version>-x86_64.AppImage`, make it executable and
+run it:
+
+```sh
+chmod +x Ratchet-*-x86_64.AppImage
+./Ratchet-*-x86_64.AppImage
+```
+
+It runs on distros from about 2025 on (glibc 2.42 or newer: Fedora 43+,
+Ubuntu 25.10+, Arch). On older distros, build from source on a newer
+distro release or in a toolbox (see below).
+
+**Windows 10/11 (64-bit):** run `Ratchet-<version>-x64-setup.exe`. It
+installs for your user without admin rights, or for all users if you
+choose so on the first page. The installer is not code-signed yet, so
+SmartScreen may warn: click *More info → Run anyway*.
 
 ---
 
