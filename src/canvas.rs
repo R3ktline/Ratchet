@@ -157,6 +157,9 @@ impl Default for View {
     }
 }
 
+/// Undo steps kept per page; older ones are dropped.
+const UNDO_MAX: usize = 200;
+
 #[derive(Default)]
 struct History {
     undo: Vec<Snap>,
@@ -892,6 +895,8 @@ impl Canvas {
         }
         self.commit_edit();
         self.flush();
+        // A failed save was reported; don't carry it over to the next page.
+        imp.dirty.set(false);
         self.cancel_input();
         imp.selection.borrow_mut().clear();
         imp.sel_texts.borrow_mut().clear();
@@ -993,6 +998,8 @@ impl Canvas {
         imp.debug.borrow_mut().save_ms = ms;
         self.log(format!("save {ms:.1} ms"));
         if let Err(e) = result {
+            // Still unsaved: the next flush (edit, page switch, exit) retries.
+            imp.dirty.set(true);
             self.report(format!("Couldn't save page: {e}"));
         }
     }
@@ -1262,6 +1269,10 @@ impl Canvas {
         {
             let mut h = imp.history.borrow_mut();
             h.undo.push(before);
+            // Each step holds a copy of the page's stroke list.
+            if h.undo.len() > UNDO_MAX {
+                h.undo.remove(0);
+            }
             h.redo.clear();
         }
         *imp.strokes.borrow_mut() = after.0;
