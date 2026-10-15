@@ -76,6 +76,7 @@ pub struct Window {
     debug_flags: std::cell::Cell<DebugFlags>,
     log_window: std::cell::OnceCell<LogWindow>,
     split: std::cell::OnceCell<adw::OverlaySplitView>,
+    sidebar_header: std::cell::OnceCell<adw::HeaderBar>,
     /// Built once (ahead of time, when idle) and reused: building it on
     /// every open stalled the opening animation.
     prefs_dialog: std::cell::OnceCell<adw::Dialog>,
@@ -220,6 +221,7 @@ impl Window {
             debug_flags: Default::default(),
             log_window: Default::default(),
             split: Default::default(),
+            sidebar_header: Default::default(),
             prefs_dialog: Default::default(),
             state: RefCell::new(State {
                 lib,
@@ -460,6 +462,7 @@ impl Window {
         sidebar_header.set_title_widget(Some(&adw::WindowTitle::new("Ratchet", "")));
         sidebar_header.pack_start(&menu_button);
         sidebar_header.pack_end(&new_notebook);
+        let _ = self.sidebar_header.set(sidebar_header.clone());
 
         let sidebar = adw::ToolbarView::new();
         sidebar.add_top_bar(&sidebar_header);
@@ -847,8 +850,10 @@ impl Window {
                 }
             }
         }
-        // At least as wide as the sidebar's own header needs.
-        let width = (widest + CHROME * s).clamp(160.0 * s, 400.0 * s);
+        // At least as wide as the sidebar's own header needs, so its title
+        // ("Ratchet", centered between the menu and "+" buttons) never ellipsizes.
+        let header = self.sidebar_header.get().map_or(0, |h| h.measure(gtk::Orientation::Horizontal, -1).1);
+        let width = (widest + CHROME * s).max(header as f64).clamp(160.0 * s, 400.0 * s);
         split.set_min_sidebar_width(width);
         split.set_max_sidebar_width(width);
     }
