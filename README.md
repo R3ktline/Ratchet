@@ -1,9 +1,8 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/ratchet-horizontal-color-on-dark.svg">
-    <img alt="Ratchet" src="assets/ratchet-horizontal-color.svg" width="360">
-  </picture>
+  <img alt="Ratchet icon" src="data/icons/scalable/apps/app.ratchet.notes.svg" width="128">
 </p>
+
+<h1 align="center">Ratchet</h1>
 
 <p align="center">
   <b>Handwritten notes, simple and fast.</b><br>
