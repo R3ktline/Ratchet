@@ -288,12 +288,22 @@ pub fn write_pdf(doc: &Doc, path: &Path) -> Result<(), String> {
 }
 
 /// PNG files for the sheets: `path` for one sheet, else `name-01.png`, …
+/// (`name 2-01.png`, … when any of those already exist: the file dialog
+/// only asked about overwriting `path`).
 pub fn write_png(doc: &Doc, path: &Path) -> Result<Vec<PathBuf>, String> {
     let err = |e: gtk::cairo::Error| e.to_string();
     let scale = PNG_DPI / 96.0;
-    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("export").to_string();
+    let base = path.file_stem().and_then(|s| s.to_str()).unwrap_or("export").to_string();
     let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let many = doc.sheets.len() > 1;
+    let sheet_file = |stem: &str, i: usize| dir.join(format!("{stem}-{:02}.png", i + 1));
+    let mut stem = base.clone();
+    for n in 2.. {
+        if !many || (0..doc.sheets.len()).all(|i| !sheet_file(&stem, i).exists()) {
+            break;
+        }
+        stem = format!("{base} {n}");
+    }
     let mut written = Vec::new();
     for (i, s) in doc.sheets.iter().enumerate() {
         let (w, h) = ((s.width as f64 * scale).ceil() as i32, (s.height as f64 * scale).ceil() as i32);
@@ -304,7 +314,7 @@ pub fn write_png(doc: &Doc, path: &Path) -> Result<Vec<PathBuf>, String> {
             node.draw(&cr);
         }
         drop(cr);
-        let file = if many { dir.join(format!("{stem}-{:02}.png", i + 1)) } else { path.to_path_buf() };
+        let file = if many { sheet_file(&stem, i) } else { path.to_path_buf() };
         let mut out = std::fs::File::create(&file).map_err(|e| e.to_string())?;
         surface.write_to_png(&mut out).map_err(|e| e.to_string())?;
         written.push(file);
@@ -392,6 +402,9 @@ mod tests {
         let pngs = write_png(&doc, &dir.join("out.png")).unwrap();
         assert_eq!(pngs.len(), doc.sheets.len());
         assert!(std::fs::read(&pngs[0]).unwrap().starts_with(b"\x89PNG"));
+        // A second multi-sheet export doesn't overwrite the first.
+        let again = write_png(&doc, &dir.join("out.png")).unwrap();
+        assert!(again[0].ends_with("out 2-01.png"));
         std::fs::remove_dir_all(dir).unwrap();
     }
 }
