@@ -22,7 +22,8 @@ cp target/release/ratchet.exe "$DIST/bin/"
 # Image loaders (SVG icons go through librsvg's loader). MSYS2's cache lists
 # them relative to the prefix, so it can be copied as is.
 cp -r "$PREFIX/lib/gdk-pixbuf-2.0" "$DIST/lib/"
-if grep -qi "msys64" "$DIST/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"; then
+# Its header comment names the MSYS2 folder; only the entries matter.
+if grep -v '^#' "$DIST/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache" | grep -qi "msys64"; then
     echo "loaders.cache has absolute MSYS2 paths:" >&2
     cat "$DIST/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache" >&2
     exit 1
