@@ -25,13 +25,7 @@
   <a href="#-license">License</a>
 </p>
 
-<p align="center">
-  <a href="assets/ratchet-demo.mp4">
-    <img alt="Demo: drawing a graph, snapping lines and a circle, the radial menu, lasso, page backgrounds, dark mode, typing LaTeX, PDF export, and the notes as plain files" src="assets/ratchet-demo.jpg" width="720">
-  </a>
-  <br>
-  <sub>▶ 30-second demo (click to play)</sub>
-</p>
+https://github.com/user-attachments/assets/540403c2-ee9a-4a13-bedb-fd8785635ce8
 
 ## ✨ Features
 
