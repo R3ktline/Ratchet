@@ -467,7 +467,7 @@ impl Default for Settings {
     fn default() -> Self {
         Settings {
             version: SETTINGS_VERSION,
-            theme: Theme::Dark,
+            theme: Theme::System,
             library_dir: None,
             last_page: None,
             expanded: Vec::new(),
@@ -498,11 +498,19 @@ fn settings_path() -> PathBuf {
 
 impl Settings {
     pub fn load() -> Self {
-        fs::read(settings_path())
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<Settings>(&bytes).ok())
-            .map(Self::migrate)
-            .unwrap_or_default()
+        let path = settings_path();
+        let Ok(bytes) = fs::read(&path) else { return Self::default() };
+        match serde_json::from_slice::<Settings>(&bytes) {
+            Ok(s) => Self::migrate(s),
+            Err(e) => {
+                // Keep the broken file (it may hold a custom library folder)
+                // instead of overwriting it with defaults on exit.
+                let bad = path.with_extension("json.bad");
+                glib::g_warning!("ratchet", "Couldn't read {}: {e}; moved it to {}", path.display(), bad.display());
+                let _ = fs::rename(&path, bad);
+                Self::default()
+            }
+        }
     }
 
     fn migrate(mut s: Settings) -> Settings {
@@ -548,7 +556,7 @@ impl Settings {
         let result = path
             .parent()
             .map_or(Ok(()), fs::create_dir_all)
-            .and_then(|_| fs::write(&path, serde_json::to_vec_pretty(self).unwrap_or_default()));
+            .and_then(|_| crate::library::write_json(&path, self));
         if let Err(e) = result {
             glib::g_warning!("ratchet", "Couldn't save settings to {}: {e}", path.display());
         }
@@ -589,5 +597,7 @@ mod tests {
         let mut s2: Settings = serde_json::from_str(r#"{"version":4,"pen_button_2":"select"}"#).unwrap();
         s2 = Settings::migrate(s2);
         assert_eq!(s2.pen_button_2, ButtonAction::Select);
+        // New users follow the system theme (light when it has none).
+        assert_eq!(Settings::default().theme, Theme::System);
     }
 }

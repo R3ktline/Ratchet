@@ -254,9 +254,14 @@ fn now_iso() -> String {
         .unwrap_or_default()
 }
 
-fn write_json<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
+/// Write via a synced temp file and a rename, so a crash or power loss
+/// leaves either the old file or the new one, never a truncated one.
+pub(crate) fn write_json<T: Serialize>(path: &Path, value: &T) -> io::Result<()> {
     let tmp = path.with_extension("tmp");
-    fs::write(&tmp, serde_json::to_vec_pretty(value)?)?;
+    let mut file = fs::File::create(&tmp)?;
+    io::Write::write_all(&mut file, &serde_json::to_vec_pretty(value)?)?;
+    file.sync_all()?;
+    drop(file);
     fs::rename(tmp, path)
 }
 
