@@ -78,11 +78,15 @@ gtk4-update-icon-cache -q -t -f "$APPDIR/usr/share/icons/Adwaita"
 # the AppImage. Our gdk-pixbuf comes first on the library path so it is
 # bundled instead of Fedora's.
 mkdir -p "$TOOLS"
-LINUXDEPLOY="$TOOLS/linuxdeploy-x86_64.AppImage"
+LINUXDEPLOY_VERSION=1-alpha-20251107-1
+LINUXDEPLOY_SHA256=c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d
+LINUXDEPLOY="$TOOLS/linuxdeploy-$LINUXDEPLOY_VERSION-x86_64.AppImage"
 if [ ! -x "$LINUXDEPLOY" ]; then
-    wget -q -O "$LINUXDEPLOY" \
-        https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-    chmod +x "$LINUXDEPLOY"
+    wget -q -O "$LINUXDEPLOY.part" \
+        "https://github.com/linuxdeploy/linuxdeploy/releases/download/$LINUXDEPLOY_VERSION/linuxdeploy-x86_64.AppImage"
+    echo "$LINUXDEPLOY_SHA256  $LINUXDEPLOY.part" | sha256sum -c -
+    chmod +x "$LINUXDEPLOY.part"
+    mv "$LINUXDEPLOY.part" "$LINUXDEPLOY"
 fi
 
 export APPIMAGE_EXTRACT_AND_RUN=1
