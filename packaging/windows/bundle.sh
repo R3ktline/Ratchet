@@ -31,7 +31,8 @@ fi
 
 # Every MSYS2 DLL the exe and the loaders load, found by following ldd.
 copy_deps() {
-    ldd "$1" | awk '{print $3}' | grep -i "^$PREFIX/bin/" | while read -r dll; do
+    # awk, not grep: grep fails on DLLs with no MSYS2 deps, ending the script.
+    ldd "$1" | awk -v p="$PREFIX/bin/" 'index(tolower($3), tolower(p)) == 1 { print $3 }' | while read -r dll; do
         name="$(basename "$dll")"
         if [ ! -f "$DIST/bin/$name" ]; then
             cp "$dll" "$DIST/bin/"
