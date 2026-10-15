@@ -90,6 +90,9 @@ if [ ! -x "$LINUXDEPLOY" ]; then
 fi
 
 export APPIMAGE_EXTRACT_AND_RUN=1
+# linuxdeploy's bundled strip can't read Fedora 43's .relr.dyn sections;
+# Fedora's libraries come stripped anyway.
+export NO_STRIP=1
 export OUTPUT="Ratchet-$VERSION-x86_64.AppImage"
 LD_LIBRARY_PATH="$PIXBUF/lib" "$LINUXDEPLOY" \
     --appdir "$APPDIR" \
