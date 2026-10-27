@@ -1,5 +1,6 @@
 /target
-/*.AppImage
+/*.flatpak
+/.flatpak-builder/
 
 # Personal Claude Code settings
 .claude/settings.local.json

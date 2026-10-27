@@ -1,6 +1,6 @@
 //! UI translations with gettext, in the system's language. The catalogs
 //! are po/*.po; build.rs compiles them to share/locale, which sits next to
-//! the folder of the executable (target/, the AppImage's usr/, the Windows
+//! the folder of the executable (target/, the Flatpak's /app, the Windows
 //! install folder).
 
 use gettextrs::{LocaleCategory, bind_textdomain_codeset, bindtextdomain, setlocale, textdomain};

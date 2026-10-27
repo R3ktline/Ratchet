@@ -1,0 +1,47 @@
+# Flatpak build of Ratchet. The GNOME runtime brings GTK and libadwaita,
+# so the result runs on any distro with Flatpak. Build and install with:
+#   flatpak run org.flatpak.Builder --user --install --force-clean \
+#     target/flatpak packaging/flatpak/app.ratchet.notes.yml
+id: app.ratchet.notes
+runtime: org.gnome.Platform
+runtime-version: '51'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: ratchet
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  # Notes live in Documents/Ratchet by default; other folders go through
+  # the file chooser portal.
+  - --filesystem=xdg-documents
+build-options:
+  append-path: /usr/lib/sdk/rust-stable/bin
+modules:
+  - name: ratchet
+    buildsystem: simple
+    build-options:
+      env:
+        CARGO_HOME: /run/build/ratchet/cargo
+      # shortcut: cargo downloads crates during the build; Flathub builds
+      # offline, so its manifest needs a generated cargo-sources.json instead.
+      build-args:
+        - --share=network
+    build-commands:
+      - cargo build --release --locked
+      - install -Dm755 target/release/ratchet /app/bin/ratchet
+      - for lang in $(cat po/LINGUAS); do install -Dm644 target/share/locale/$lang/LC_MESSAGES/ratchet.mo /app/share/locale/$lang/LC_MESSAGES/ratchet.mo; done
+      - install -Dm644 data/app.ratchet.notes.desktop /app/share/applications/app.ratchet.notes.desktop
+      - install -Dm644 data/app.ratchet.notes.metainfo.xml /app/share/metainfo/app.ratchet.notes.metainfo.xml
+      - install -Dm644 data/icons/scalable/apps/app.ratchet.notes.svg /app/share/icons/hicolor/scalable/apps/app.ratchet.notes.svg
+      - install -Dm644 data/icons/scalable/apps/app.ratchet.notes-symbolic.svg /app/share/icons/hicolor/symbolic/apps/app.ratchet.notes-symbolic.svg
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - target
+          - .flatpak-builder
+          - brag-output
+          - assets

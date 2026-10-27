@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>app.ratchet.notes</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>CC-BY-NC-SA-4.0</project_license>
+  <name>Ratchet</name>
+  <summary>Handwritten notes, simple and fast</summary>
+  <developer id="io.github.r3ktline">
+    <name>r3ktline</name>
+  </developer>
+  <description>
+    <p>A pen-first notes app for drawing tablets and 2-in-1s: write by hand in notebooks, sections and pages, as quickly as on paper.</p>
+    <ul>
+      <li>Notebooks, sections and pages in a sidebar, with drag and drop</li>
+      <li>Pressure-sensitive ink, highlighters and an eraser that cuts strokes</li>
+      <li>Hold the pen still to snap a stroke to a line, arrow or circle</li>
+      <li>Radial menu from a pen side button, lasso selection</li>
+      <li>Text boxes with inline LaTeX math</li>
+      <li>Infinite canvas or paper sheets with lined, grid or dotted backgrounds</li>
+      <li>Export to PDF or PNG</li>
+    </ul>
+    <p>Notes are plain folders and JSON files in Documents/Ratchet, so any sync tool works.</p>
+  </description>
+  <launchable type="desktop-id">app.ratchet.notes.desktop</launchable>
+  <url type="homepage">https://github.com/R3ktline/Ratchet</url>
+  <url type="bugtracker">https://github.com/R3ktline/Ratchet/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/R3ktline/Ratchet/main/assets/ratchet-demo.jpg</image>
+      <caption>Notes with ink, shapes and math</caption>
+    </screenshot>
+  </screenshots>
+  <supports>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.0.1" date="2026-10-27">
+      <description>
+        <p>Linux builds are now a Flatpak, which runs on any distro and updates itself.</p>
+      </description>
+    </release>
+    <release version="1.0.0" date="2026-10-27"/>
+  </releases>
+</component>

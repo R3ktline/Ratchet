@@ -1,6 +1,7 @@
-# Builds the Linux AppImage and the Windows installer. On a version tag
+# Builds the Linux Flatpak and the Windows installer. On a version tag
 # (v1.2.3) it publishes them as a GitHub release whose notes are the
-# annotated tag's message. Run it by hand to only build the files.
+# annotated tag's message, and updates the Flatpak repository on GitHub
+# Pages that installed copies update from. Run it by hand to only build.
 name: Release
 
 on:
@@ -13,17 +14,12 @@ permissions:
 
 jobs:
   linux:
-    name: Linux AppImage
+    name: Linux Flatpak
     runs-on: ubuntu-24.04
-    container: fedora:43
+    container:
+      image: ghcr.io/flathub-infra/flatpak-github-actions:gnome-51
+      options: --privileged
     steps:
-      - name: Install build dependencies
-        run: >
-          dnf install -y --setopt=install_weak_deps=False
-          git rust cargo cargo-c gcc meson ninja-build gtk4-devel libadwaita-devel
-          libpng-devel libjpeg-turbo-devel libxml2-devel adwaita-icon-theme
-          hicolor-icon-theme desktop-file-utils file wget findutils xz tar gettext
-
       - uses: actions/checkout@v5
 
       - name: Check the tag matches Cargo.toml
@@ -32,16 +28,26 @@ jobs:
           version="$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
           test "v$version" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME, Cargo.toml $version"; exit 1; }
 
-      - name: Build AppImage
-        run: bash packaging/linux/build-appimage.sh
+      - name: Import the repository signing key
+        env:
+          KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
+        run: printf '%s\n' "$KEY" | gpg --batch --import
+
+      - name: Build Flatpak repository and bundle
+        run: |
+          flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          bash packaging/flatpak/build-repo.sh
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linux
-          path: |
-            Ratchet-*-x86_64.AppImage
-            Ratchet-*-x86_64.AppImage.zsync
+          name: release-linux
+          path: Ratchet-*-x86_64.flatpak
           if-no-files-found: error
+
+      - uses: actions/upload-pages-artifact@v3
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          path: target/site
 
   windows:
     name: Windows installer
@@ -82,7 +88,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: windows
+          name: release-windows
           path: target/installer/Ratchet-*-x64-setup.exe
           if-no-files-found: error
 
@@ -97,9 +103,11 @@ jobs:
       - name: Fetch the annotated tag
         run: git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
 
+      # Not the Pages artifact: that's the repository, not a download.
       - uses: actions/download-artifact@v5
         with:
           path: dist
+          pattern: release-*
           merge-multiple: true
 
       - name: Create release
@@ -110,3 +118,19 @@ jobs:
             --title "Ratchet ${GITHUB_REF_NAME#v}" \
             --notes-from-tag \
             --verify-tag
+
+  pages:
+    name: Publish Flatpak repository
+    if: startsWith(github.ref, 'refs/tags/')
+    # After the release, so the repository never offers an unreleased version.
+    needs: release
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

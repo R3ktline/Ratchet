@@ -1,6 +1,5 @@
 # Shell scripts must keep LF endings, also in Windows checkouts (bash
 # fails on CRLF).
 *.sh text eol=lf
-packaging/linux/AppRun text eol=lf
 # Read by bundle.sh's `$(cat po/LINGUAS)`, where a CR would end up in paths.
 po/LINGUAS text eol=lf

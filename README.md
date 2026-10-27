@@ -62,23 +62,16 @@ in `~/.config/ratchet/settings.json` on Linux and
 
 ## 📦 Install
 
-Download the latest version from the
-[releases page](https://github.com/R3ktline/Ratchet/releases/latest).
-
-**🐧 Linux:** get `Ratchet-<version>-x86_64.AppImage`, make it executable and
-run it:
+**🐧 Linux** (any distro with [Flatpak](https://flatpak.org/setup/)):
 
 ```sh
-chmod +x Ratchet-*-x86_64.AppImage
-./Ratchet-*-x86_64.AppImage
+flatpak install --user https://r3ktline.github.io/Ratchet/app.ratchet.notes.flatpakref
 ```
 
-To get updates, open it with [Gear Lever](https://flathub.org/apps/it.mijorus.gearlever)
-(or AppImageUpdate): the AppImage knows where new releases come from.
-
-It runs on distros from about 2025 on (glibc 2.42 or newer: Fedora 43+,
-Ubuntu 25.10+, Arch). On older distros, [build from source](#%EF%B8%8F-build-from-source)
-on a newer distro release or in a toolbox.
+Or download `Ratchet-<version>-x86_64.flatpak` from the
+[releases page](https://github.com/R3ktline/Ratchet/releases/latest) and open
+it with your software center. Either way, updates come with
+`flatpak update` or through the software center.
 
 **🪟 Windows 10/11 (64-bit):** run `Ratchet-<version>-x64-setup.exe`. It
 installs for your user without admin rights, or for all users if you
@@ -269,7 +262,7 @@ cargo test --release
 cargo clippy
 ```
 
-Release builds (Linux AppImage, Windows installer) are made by
+Release builds (Linux Flatpak, Windows installer) are made by
 `.github/workflows/release.yml` from the scripts in `packaging/` when a
 `v*` tag is pushed. Bug reports and pull requests are welcome.
 
