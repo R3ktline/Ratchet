@@ -101,6 +101,9 @@ export APPIMAGE_EXTRACT_AND_RUN=1
 # Fedora's libraries come stripped anyway.
 export NO_STRIP=1
 export OUTPUT="Ratchet-$VERSION-x86_64.AppImage"
+# Lets AppImage updaters (Gear Lever, AppImageUpdate) fetch the latest
+# GitHub release; also writes $OUTPUT.zsync, which the release must carry.
+export LDAI_UPDATE_INFORMATION="gh-releases-zsync|R3ktline|Ratchet|latest|Ratchet-*x86_64.AppImage.zsync"
 LD_LIBRARY_PATH="$PIXBUF/lib" "$LINUXDEPLOY" \
     --appdir "$APPDIR" \
     --executable "$APPDIR/usr/bin/ratchet" \

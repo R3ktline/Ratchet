@@ -73,6 +73,9 @@ chmod +x Ratchet-*-x86_64.AppImage
 ./Ratchet-*-x86_64.AppImage
 ```
 
+To get updates, open it with [Gear Lever](https://flathub.org/apps/it.mijorus.gearlever)
+(or AppImageUpdate): the AppImage knows where new releases come from.
+
 It runs on distros from about 2025 on (glibc 2.42 or newer: Fedora 43+,
 Ubuntu 25.10+, Arch). On older distros, [build from source](#%EF%B8%8F-build-from-source)
 on a newer distro release or in a toolbox.
