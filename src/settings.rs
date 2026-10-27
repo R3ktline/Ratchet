@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use gtk::glib;
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::{tr, trf};
 use crate::ink::{InkColor, Tool};
 use crate::text::TextSize;
 
@@ -143,6 +144,9 @@ pub struct PenSlot {
     pub tool: Tool,
     pub color: InkColor,
     pub width_mm: f32,
+    /// Fountain pen (width follows pressure) instead of a ballpoint.
+    #[serde(default)]
+    pub fountain: bool,
 }
 
 impl PenSlot {
@@ -163,7 +167,7 @@ impl PenSlot {
     }
 
     pub fn new(tool: Tool, color: InkColor) -> Self {
-        PenSlot { tool, color, width_mm: Self::presets(tool)[1] }
+        PenSlot { tool, color, width_mm: Self::presets(tool)[1], fountain: false }
     }
 }
 
@@ -217,12 +221,12 @@ impl Smoothing {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            Smoothing::Off => "Off",
-            Smoothing::Low => "Low",
-            Smoothing::Medium => "Medium",
-            Smoothing::High => "High",
+            Smoothing::Off => tr("Off"),
+            Smoothing::Low => tr("Low"),
+            Smoothing::Medium => tr("Medium"),
+            Smoothing::High => tr("High"),
         }
     }
 }
@@ -252,14 +256,14 @@ impl ButtonAction {
         ButtonAction::Click,
     ];
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            ButtonAction::Eraser => "Eraser",
-            ButtonAction::Pan => "Pan",
-            ButtonAction::Select => "Select",
-            ButtonAction::Draw => "Draw",
-            ButtonAction::Menu => "Menu",
-            ButtonAction::Click => "Click",
+            ButtonAction::Eraser => tr("Eraser"),
+            ButtonAction::Pan => tr("Pan"),
+            ButtonAction::Select => tr("Select"),
+            ButtonAction::Draw => tr("Draw"),
+            ButtonAction::Menu => tr("Menu"),
+            ButtonAction::Click => tr("Click"),
         }
     }
 }
@@ -327,18 +331,18 @@ impl RadialItem {
 
     pub fn label(self) -> String {
         match self {
-            RadialItem::Slot(i) => format!("Pen slot {}", i + 1),
-            RadialItem::Eraser => "Eraser".into(),
-            RadialItem::Select => "Select".into(),
-            RadialItem::Text => "Text".into(),
-            RadialItem::Hand => "Pan (hand tool)".into(),
-            RadialItem::Undo => "Undo".into(),
-            RadialItem::Redo => "Redo".into(),
-            RadialItem::NewPage => "New page".into(),
-            RadialItem::Paste => "Paste".into(),
-            RadialItem::ZoomReset => "Zoom to 100%".into(),
-            RadialItem::Fullscreen => "Fullscreen".into(),
-            RadialItem::None => "(empty)".into(),
+            RadialItem::Slot(i) => trf("Pen slot {}", &[&(i + 1).to_string()]),
+            RadialItem::Eraser => tr("Eraser"),
+            RadialItem::Select => tr("Select"),
+            RadialItem::Text => tr("Text"),
+            RadialItem::Hand => tr("Pan (hand tool)"),
+            RadialItem::Undo => tr("Undo"),
+            RadialItem::Redo => tr("Redo"),
+            RadialItem::NewPage => tr("New page"),
+            RadialItem::Paste => tr("Paste"),
+            RadialItem::ZoomReset => tr("Zoom to 100%"),
+            RadialItem::Fullscreen => tr("Fullscreen"),
+            RadialItem::None => tr("(empty)"),
         }
     }
 }

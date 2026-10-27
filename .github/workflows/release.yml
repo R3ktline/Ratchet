@@ -22,7 +22,7 @@ jobs:
           dnf install -y --setopt=install_weak_deps=False
           git rust cargo cargo-c gcc meson ninja-build gtk4-devel libadwaita-devel
           libpng-devel libjpeg-turbo-devel libxml2-devel adwaita-icon-theme
-          hicolor-icon-theme desktop-file-utils file wget findutils xz tar
+          hicolor-icon-theme desktop-file-utils file wget findutils xz tar gettext
 
       - uses: actions/checkout@v5
 
@@ -61,6 +61,7 @@ jobs:
             mingw-w64-ucrt-x86_64-gtk4
             mingw-w64-ucrt-x86_64-libadwaita
             mingw-w64-ucrt-x86_64-adwaita-icon-theme
+            mingw-w64-ucrt-x86_64-gettext-tools
 
       - name: Build
         run: cargo build --release --locked

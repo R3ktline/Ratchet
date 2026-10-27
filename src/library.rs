@@ -21,7 +21,9 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::{gettext_noop, tr};
 use crate::ink::Stroke;
+use crate::kinds;
 use crate::text::TextBox;
 use crate::naming::{Pattern, Today};
 
@@ -35,13 +37,8 @@ const FORMAT_VERSION: u32 = 1;
 pub const PALETTE: [&str; 10] =
     ["blue", "green", "orange", "purple", "red", "teal", "yellow", "pink", "brown", "slate"];
 
-/// Sections every new notebook starts with.
-const PRESET_SECTIONS: [&str; 2] = ["Course", "Assignments"];
-
-/// Page-name prefixes for well-known section names; others use the
-/// section name itself.
-const SECTION_PREFIXES: [(&str, &str); 3] =
-    [("Course", "Lecture"), ("Assignments", "Assignment"), ("Laboratory", "Lab")];
+/// Sections every new notebook starts with (translated when created).
+const PRESET_SECTIONS: [&str; 2] = [gettext_noop("Course"), gettext_noop("Assignments")];
 
 #[derive(Serialize, Deserialize)]
 struct LibraryMeta {
@@ -124,12 +121,12 @@ impl PaperSize {
             PaperSize::A3 => "A3".into(),
             PaperSize::A4 => "A4".into(),
             PaperSize::A5 => "A5".into(),
-            PaperSize::Letter => "US Letter".into(),
-            PaperSize::Legal => "US Legal".into(),
-            PaperSize::Tabloid => "Tabloid".into(),
-            PaperSize::Slide16x9 => "Slide 16:9".into(),
-            PaperSize::Slide4x3 => "Slide 4:3".into(),
-            PaperSize::Custom { .. } => "Custom".into(),
+            PaperSize::Letter => tr("US Letter"),
+            PaperSize::Legal => tr("US Legal"),
+            PaperSize::Tabloid => tr("Tabloid"),
+            PaperSize::Slide16x9 => tr("Slide 16:9"),
+            PaperSize::Slide4x3 => tr("Slide 4:3"),
+            PaperSize::Custom { .. } => tr("Custom"),
         }
     }
 
@@ -302,7 +299,11 @@ fn unique_name(dir: &Path, base: &str, ext: Option<&str>, keep: Option<&str>) ->
     };
     (1..)
         .map(make)
-        .find(|name| Some(name.as_str()) == keep || !dir.join(name).exists())
+        // Windows names ignore case: "math" -> "Math" is the same file, not a clash.
+        .find(|name| {
+            keep.is_some_and(|k| k == name.as_str() || (cfg!(windows) && k.to_lowercase() == name.to_lowercase()))
+                || !dir.join(name).exists()
+        })
         .expect("unbounded")
 }
 
@@ -331,12 +332,10 @@ fn reconcile(order: Vec<String>, on_disk: &[String]) -> Vec<String> {
     out
 }
 
+/// Pages are named after the section's type ("Übungen" -> "Exercise 1"),
+/// else after the section itself.
 fn default_pattern(section_name: &str) -> Pattern {
-    let prefix = SECTION_PREFIXES
-        .iter()
-        .find(|(name, _)| *name == section_name)
-        .map_or(section_name, |(_, prefix)| prefix);
-    Pattern::numbered(prefix)
+    Pattern::numbered(&kinds::section_type(section_name).map_or(section_name.to_string(), |t| tr(t.page)))
 }
 
 impl Library {
@@ -461,7 +460,7 @@ impl Library {
         self.save_notebook_meta(nb)?;
         self.save_library_meta()?;
         for section in PRESET_SECTIONS {
-            self.create_section(nb, section)?;
+            self.create_section(nb, &tr(section))?;
         }
         Ok(nb)
     }
@@ -531,6 +530,12 @@ impl Library {
             fs::rename(self.root.join(&old), self.root.join(&dir))?;
         }
         let n = &mut self.notebooks[nb];
+        // Named after a new subject: take its color ("Anatomy" is red).
+        if let Some(subject) = kinds::subject(name)
+            && kinds::subject(&n.name).map(|s| s.color) != Some(subject.color)
+        {
+            n.color = subject.color.to_string();
+        }
         n.dir = dir;
         n.name = name.to_string();
         self.save_notebook_meta(nb)?;
@@ -730,6 +735,30 @@ mod tests {
         lib.set_section_layout(nb, 0, PageLayout { size: custom, ..Default::default() }).unwrap();
         let p = lib.create_page(nb, 0, false).unwrap();
         assert_eq!(PageFile::load(&lib.page_path(nb, 0, p)).unwrap().layout.size, custom);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn subject_color_on_rename() {
+        let root = temp_root("subject");
+        let mut lib = Library::load(&root).unwrap();
+        let nb = lib.create_notebook("New Notebook").unwrap();
+        lib.rename_notebook(nb, "Anatomie").unwrap();
+        assert_eq!(lib.notebooks[nb].color, "red");
+        // Same subject again: the color stays whatever it is now.
+        lib.notebooks[nb].color = "teal".into();
+        lib.rename_notebook(nb, "Anatomie II").unwrap();
+        assert_eq!(lib.notebooks[nb].color, "teal");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn case_only_rename_keeps_name() {
+        let root = temp_root("case");
+        let mut lib = Library::load(&root).unwrap();
+        let nb = lib.create_notebook("math").unwrap();
+        lib.rename_notebook(nb, "Math").unwrap();
+        assert_eq!(lib.notebooks[nb].dir, "Math");
         fs::remove_dir_all(root).unwrap();
     }
 

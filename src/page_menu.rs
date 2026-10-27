@@ -6,6 +6,7 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 
+use crate::i18n::{gettext_noop, tr, trf};
 use crate::library::{Background, PageLayout, PageSize, PaperSize};
 use crate::platform::px;
 use crate::settings::LengthUnit;
@@ -125,19 +126,19 @@ pub fn build(current: PageLayout, section_name: &str, unit: LengthUnit, cb: Call
         .build();
 
     // Size
-    let mut names = vec!["Infinite".to_string()];
+    let mut names = vec![tr("Infinite")];
     names.extend(PaperSize::PRESETS.iter().map(|p| p.label()));
-    names.push("Custom".into());
+    names.push(tr("Custom"));
     let names: Vec<&str> = names.iter().map(String::as_str).collect();
     let size = adw::ComboRow::builder()
-        .title("Paper")
+        .title(tr("Paper"))
         .model(&gtk::StringList::new(&names))
         .selected(size_index(current.size))
-        .tooltip_text("Sheets turn to match the screen on new pages")
+        .tooltip_text(tr("Sheets turn to match the screen on new pages"))
         .build();
     size.add_prefix(&gtk::Image::from_icon_name("document-page-setup-symbolic"));
 
-    let landscape = adw::SwitchRow::builder().title("Landscape").build();
+    let landscape = adw::SwitchRow::builder().title(tr("Landscape")).build();
     landscape.add_prefix(&gtk::Image::from_icon_name("object-rotate-right-symbolic"));
 
     // Custom size: width and height in the chosen unit.
@@ -146,10 +147,10 @@ pub fn build(current: PageLayout, section_name: &str, unit: LengthUnit, cb: Call
         let adj = gtk::Adjustment::new(0.0, 0.0, 10_000.0, 1.0, 10.0, 0.0);
         adw::SpinRow::builder().title(title).adjustment(&adj).digits(1).build()
     };
-    let width = spin("Width");
-    let height = spin("Height");
+    let width = spin(&tr("Width"));
+    let height = spin(&tr("Height"));
     let units = adw::ComboRow::builder()
-        .title("Unit")
+        .title(tr("Unit"))
         .model(&gtk::StringList::new(&LengthUnit::ALL.map(LengthUnit::label)))
         .selected(LengthUnit::ALL.iter().position(|u| *u == unit.get()).unwrap_or(0) as u32)
         .build();
@@ -284,14 +285,14 @@ pub fn build(current: PageLayout, section_name: &str, unit: LengthUnit, cb: Call
 
     // Background: pictures of the patterns, names in tooltips.
     const BACKGROUNDS: [(Background, &str); 4] = [
-        (Background::Blank, "Blank"),
-        (Background::Lined, "Lines"),
-        (Background::Grid, "Grid"),
-        (Background::Dotted, "Dots"),
+        (Background::Blank, gettext_noop("Blank")),
+        (Background::Lined, gettext_noop("Lines")),
+        (Background::Grid, gettext_noop("Grid")),
+        (Background::Dotted, gettext_noop("Dots")),
     ];
     let backgrounds = adw::ToggleGroup::builder().homogeneous(true).build();
     for (bg, tip) in BACKGROUNDS {
-        backgrounds.add(adw::Toggle::builder().name(background_name(bg)).child(&background_preview(bg)).tooltip(tip).build());
+        backgrounds.add(adw::Toggle::builder().name(background_name(bg)).child(&background_preview(bg)).tooltip(tr(tip)).build());
     }
     backgrounds.set_active_name(Some(background_name(current.background)));
     {
@@ -308,8 +309,8 @@ pub fn build(current: PageLayout, section_name: &str, unit: LengthUnit, cb: Call
 
     let popover = gtk::Popover::new();
     let default_button = gtk::Button::builder()
-        .child(&adw::ButtonContent::builder().icon_name("starred-symbolic").label("Set as Default").build())
-        .tooltip_text(format!("Use for new pages in “{section_name}”"))
+        .child(&adw::ButtonContent::builder().icon_name("starred-symbolic").label(tr("Set as Default")).build())
+        .tooltip_text(trf("Use for new pages in “{}”", &[section_name]))
         .css_classes(["flat"])
         .halign(gtk::Align::Center)
         .build();

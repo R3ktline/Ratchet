@@ -5,6 +5,10 @@
   <gresource prefix="/app/ratchet/notes">
     <file>icons/scalable/apps/app.ratchet.notes.svg</file>
     <file>icons/scalable/apps/app.ratchet.notes-symbolic.svg</file>
+    <!-- Sidebar icons the Adwaita theme doesn't have (see kinds.rs). -->
+    <file>icons/scalable/actions/ratchet-papers-symbolic.svg</file>
+    <file>icons/scalable/actions/ratchet-sigma-symbolic.svg</file>
+    <file>icons/scalable/actions/ratchet-stethoscope-symbolic.svg</file>
     <file>style.css</file>
   </gresource>
 </gresources>

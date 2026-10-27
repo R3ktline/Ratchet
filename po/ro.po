@@ -1,0 +1,772 @@
+# Romanian translation of Ratchet.
+msgid ""
+msgstr ""
+"Project-Id-Version: ratchet 1.0.0\n"
+"Report-Msgid-Bugs-To: https://github.com/R3ktline/Ratchet/issues\n"
+"POT-Creation-Date: 2026-10-23 18:41+0300\n"
+"Language: ro\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=(n==1 ? 0 : (n==0 || (n%100 > 0 && n%100 < "
+"20)) ? 1 : 2);\n"
+
+#: src/canvas.rs:923
+#, rust-format
+msgid "Couldn't open page: {}"
+msgstr "Pagina nu a putut fi deschisă: {}"
+
+#: src/canvas.rs:1005
+#, rust-format
+msgid "Couldn't save page: {}"
+msgstr "Pagina nu a putut fi salvată: {}"
+
+#: src/export_dialog.rs:61
+msgid "Image"
+msgstr "Imagine"
+
+#: src/export_dialog.rs:61
+msgid "PNG, 200 DPI"
+msgstr "PNG, 200 DPI"
+
+#: src/export_dialog.rs:65
+msgid "Format"
+msgstr "Format"
+
+#: src/export_dialog.rs:71
+msgid "A4 Pages"
+msgstr "Pagini A4"
+
+#: src/export_dialog.rs:71
+msgid "Split into A4 pages"
+msgstr "Împarte în pagini A4"
+
+#: src/export_dialog.rs:72
+msgid "One Page"
+msgstr "O pagină"
+
+#: src/export_dialog.rs:72
+msgid "One page, cropped to the content"
+msgstr "O singură pagină, decupată la conținut"
+
+#: src/export_dialog.rs:77
+msgid "Infinite Pages"
+msgstr "Pagini infinite"
+
+#: src/export_dialog.rs:84
+msgid "Page Pattern"
+msgstr "Model pagină"
+
+#: src/export_dialog.rs:85
+msgid "Lines, grid or dots"
+msgstr "Linii, pătrățele sau puncte"
+
+#: src/export_dialog.rs:89
+msgid "Open When Done"
+msgstr "Deschide la final"
+
+#: src/export_dialog.rs:92
+msgid "Options"
+msgstr "Opțiuni"
+
+#: src/export_dialog.rs:93
+msgid "Exports always use white paper"
+msgstr "Exporturile folosesc mereu hârtie albă"
+
+#: src/export_dialog.rs:98
+msgid "Cancel"
+msgstr "Anulează"
+
+#: src/export_dialog.rs:100 src/export_dialog.rs:113 src/window.rs:515
+msgid "Export"
+msgstr "Exportă"
+
+#: src/export_dialog.rs:136
+msgid "PDF documents"
+msgstr "Documente PDF"
+
+#: src/export_dialog.rs:137
+msgid "PNG images"
+msgstr "Imagini PNG"
+
+#: src/export_dialog.rs:145
+msgid "Export To"
+msgstr "Exportă în"
+
+#: src/kinds.rs:31
+msgid "Assignment"
+msgstr "Temă"
+
+#: src/kinds.rs:40
+msgid "Exercise"
+msgstr "Exercițiu"
+
+#: src/kinds.rs:46
+msgid "Tutorial"
+msgstr "Tutoriat"
+
+#: src/kinds.rs:47
+msgid "Seminar"
+msgstr "Seminar"
+
+#: src/kinds.rs:50
+msgid "Lab"
+msgstr "Laborator"
+
+#: src/kinds.rs:58
+msgid "Exam"
+msgstr "Examen"
+
+#: src/kinds.rs:66
+msgid "Summary"
+msgstr "Rezumat"
+
+#: src/kinds.rs:74
+msgid "Project"
+msgstr "Proiect"
+
+#: src/kinds.rs:79
+msgid "Lecture"
+msgstr "Curs"
+
+#: src/library.rs:41
+msgid "Assignments"
+msgstr "Teme"
+
+#: src/library.rs:41
+msgid "Course"
+msgstr "Cursuri"
+
+#: src/library.rs:124
+msgid "US Letter"
+msgstr "Letter SUA"
+
+#: src/library.rs:125
+msgid "US Legal"
+msgstr "Legal SUA"
+
+#: src/library.rs:126
+msgid "Tabloid"
+msgstr "Tabloid"
+
+#: src/library.rs:127
+msgid "Slide 16:9"
+msgstr "Slide 16:9"
+
+#: src/library.rs:128
+msgid "Slide 4:3"
+msgstr "Slide 4:3"
+
+#: src/library.rs:129 src/page_menu.rs:131
+msgid "Custom"
+msgstr "Personalizat"
+
+#: src/page_menu.rs:129
+msgid "Infinite"
+msgstr "Infinită"
+
+#: src/page_menu.rs:134
+msgid "Paper"
+msgstr "Hârtie"
+
+#: src/page_menu.rs:137
+msgid "Sheets turn to match the screen on new pages"
+msgstr "Paginile noi se orientează după ecran"
+
+#: src/page_menu.rs:141
+msgid "Landscape"
+msgstr "Peisaj"
+
+#: src/page_menu.rs:150
+msgid "Width"
+msgstr "Lățime"
+
+#: src/page_menu.rs:151
+msgid "Height"
+msgstr "Înălțime"
+
+#: src/page_menu.rs:153
+msgid "Unit"
+msgstr "Unitate"
+
+#: src/page_menu.rs:288
+msgid "Blank"
+msgstr "Goală"
+
+#: src/page_menu.rs:289
+msgid "Lines"
+msgstr "Linii"
+
+#: src/page_menu.rs:290
+msgid "Grid"
+msgstr "Pătrățele"
+
+#: src/page_menu.rs:291
+msgid "Dots"
+msgstr "Puncte"
+
+#: src/page_menu.rs:312
+msgid "Set as Default"
+msgstr "Implicit"
+
+#: src/page_menu.rs:313
+#, rust-format
+msgid "Use for new pages in “{}”"
+msgstr "Folosește pentru paginile noi din „{}”"
+
+#: src/preferences.rs:48
+msgid "Hold For"
+msgstr "Durată"
+
+#: src/preferences.rs:49
+msgid "Seconds"
+msgstr "Secunde"
+
+#: src/preferences.rs:85
+msgid "Smoothing"
+msgstr "Netezire"
+
+#: src/preferences.rs:86
+msgid "Higher smooths out wobble; the line trails the pen a little more"
+msgstr ""
+"Mai mare elimină tremurul; linia urmează creionul cu puțin mai multă "
+"întârziere"
+
+#: src/preferences.rs:92
+msgid "Snap to Shapes"
+msgstr "Forme automate"
+
+#: src/preferences.rs:93
+msgid "Hold still at the end of a stroke"
+msgstr "Oprește-te la final de linie"
+
+#: src/preferences.rs:94
+msgid "Straight lines (snapping to 15°), arrows and circles"
+msgstr "Linii drepte (din 15° în 15°), săgeți și cercuri"
+
+#: src/preferences.rs:99
+msgid "Ink"
+msgstr "Cerneală"
+
+#: src/preferences.rs:113
+msgid "Lower Side Button"
+msgstr "Buton lateral jos"
+
+#: src/preferences.rs:114
+msgid "Middle click: press while hovering, or hold while touching"
+msgstr "Clic mijloc: apasă deasupra ecranului sau ține apăsat atingând"
+
+#: src/preferences.rs:119
+msgid "Upper Side Button"
+msgstr "Buton lateral sus"
+
+#: src/preferences.rs:120
+msgid "Right click: hold while touching"
+msgstr "Clic dreapta: ține apăsat atingând"
+
+#: src/preferences.rs:125
+msgid "Eraser End"
+msgstr "Capăt radieră"
+
+#: src/preferences.rs:126
+msgid "The flipped pen, or a button your tablet driver maps to eraser"
+msgstr ""
+"Creionul întors sau un buton pe care driverul tabletei îl atribuie radierei"
+
+#: src/preferences.rs:132
+msgid "Which button is which? Debug › Pen Input Overlay (RATCHET_DEBUG=1)"
+msgstr "Care buton e care? Debug › Pen Input Overlay (RATCHET_DEBUG=1)"
+
+#: src/preferences.rs:135
+msgid "Pen Buttons"
+msgstr "Butoanele creionului"
+
+#: src/preferences.rs:142
+msgid "Long Press"
+msgstr "Apăsare lungă"
+
+#: src/preferences.rs:143
+msgid "Hold the pen still to open it"
+msgstr "Ține creionul nemișcat"
+
+#: src/preferences.rs:144
+msgid "Without moving, anywhere on the page"
+msgstr "Fără mișcare, oriunde pe pagină"
+
+#: src/preferences.rs:150
+msgid "Customize Items…"
+msgstr "Personalizează…"
+
+#: src/preferences.rs:152 src/radial_editor.rs:348
+msgid "Radial Menu"
+msgstr "Meniu radial"
+
+#: src/preferences.rs:153
+msgid ""
+"Point at an item and release, or touch, slide toward it and lift. The center "
+"or Esc closes it."
+msgstr ""
+"Indică un element și eliberează, sau atinge, glisează spre el și ridică. "
+"Centrul sau Esc îl închide."
+
+#: src/preferences.rs:182 src/window.rs:433
+msgid "Preferences"
+msgstr "Preferințe"
+
+#: src/radial_editor.rs:32
+#, rust-format
+msgid "Pen {}"
+msgstr "Pix {}"
+
+#: src/radial_editor.rs:36
+#, rust-format
+msgid "Highlighter {}"
+msgstr "Marker {}"
+
+#: src/radial_editor.rs:125
+#, rust-format
+msgid "{} of {} items"
+msgstr "{} din {} elemente"
+
+#: src/radial_editor.rs:228 src/toolbar.rs:702
+msgid "Remove"
+msgstr "Elimină"
+
+#: src/radial_editor.rs:305
+msgid ""
+"Drag items onto the ring to add them, onto a spot to replace it. Drag a spot "
+"onto another to swap, or drag it off the ring to remove it. Or tap a spot, "
+"then an item."
+msgstr ""
+"Trage elemente pe inel ca să le adaugi, sau pe un loc ca să-l înlocuiești. "
+"Trage un loc peste altul ca să le schimbi, sau în afara inelului ca să-l "
+"elimini. Sau atinge un loc, apoi un element."
+
+#: src/radial_editor.rs:311
+msgid "Reset to Defaults"
+msgstr "Resetează"
+
+#: src/settings.rs:226
+msgid "Off"
+msgstr "Oprit"
+
+#: src/settings.rs:227
+msgid "Low"
+msgstr "Mică"
+
+#: src/settings.rs:228 src/toolbar.rs:673
+msgid "Medium"
+msgstr "Medie"
+
+#: src/settings.rs:229
+msgid "High"
+msgstr "Mare"
+
+#: src/settings.rs:261 src/settings.rs:335
+msgid "Eraser"
+msgstr "Radieră"
+
+#: src/settings.rs:262
+msgid "Pan"
+msgstr "Deplasare"
+
+#: src/settings.rs:263 src/settings.rs:336
+msgid "Select"
+msgstr "Selectare"
+
+#: src/settings.rs:264
+msgid "Draw"
+msgstr "Desen"
+
+#: src/settings.rs:265
+msgid "Menu"
+msgstr "Meniu"
+
+#: src/settings.rs:266
+msgid "Click"
+msgstr "Clic"
+
+#: src/settings.rs:334
+#, rust-format
+msgid "Pen slot {}"
+msgstr "Loc creion {}"
+
+#: src/settings.rs:337
+msgid "Text"
+msgstr "Text"
+
+#: src/settings.rs:338
+msgid "Pan (hand tool)"
+msgstr "Deplasare (mână)"
+
+#: src/settings.rs:339 src/window.rs:2060
+msgid "Undo"
+msgstr "Anulează"
+
+#: src/settings.rs:340
+msgid "Redo"
+msgstr "Refă"
+
+#: src/settings.rs:341
+msgid "New page"
+msgstr "Pagină nouă"
+
+#: src/settings.rs:342
+msgid "Paste"
+msgstr "Lipește"
+
+#: src/settings.rs:343
+msgid "Zoom to 100%"
+msgstr "Zoom la 100%"
+
+#: src/settings.rs:344
+msgid "Fullscreen"
+msgstr "Ecran complet"
+
+#: src/settings.rs:345
+msgid "(empty)"
+msgstr "(gol)"
+
+#: src/text.rs:43
+msgid "Small"
+msgstr "Mic"
+
+#: src/text.rs:44
+msgid "Normal"
+msgstr "Normal"
+
+#: src/text.rs:45
+msgid "Large"
+msgstr "Mare"
+
+#: src/text.rs:46
+msgid "Heading"
+msgstr "Titlu"
+
+#: src/toolbar.rs:86
+#, rust-format
+msgid "Pen {} mm (click again to edit)"
+msgstr "Pix {} mm (clic din nou pentru editare)"
+
+#: src/toolbar.rs:87
+#, rust-format
+msgid "Highlighter {} mm (click again to edit)"
+msgstr "Marker {} mm (clic din nou pentru editare)"
+
+#: src/toolbar.rs:148
+msgid "Eraser (click again for options)"
+msgstr "Radieră (clic din nou pentru opțiuni)"
+
+#: src/toolbar.rs:153
+msgid "Select strokes — draw a loop or tap a stroke"
+msgstr "Selectează linii — încercuiește sau atinge o linie"
+
+#: src/toolbar.rs:162
+msgid "Pen"
+msgstr "Pix"
+
+#: src/toolbar.rs:163
+msgid "Highlighter"
+msgstr "Marker"
+
+#: src/toolbar.rs:166
+msgid "Text Tool"
+msgstr "Unealtă text"
+
+#: src/toolbar.rs:170
+msgid "Add Tool"
+msgstr "Adaugă unealtă"
+
+#: src/toolbar.rs:177
+msgid "Text (T) — click to type, drag to set a width; $…$ for math"
+msgstr "Text (T) — clic ca să scrii, trage pentru lățime; $…$ pentru formule"
+
+#: src/toolbar.rs:184
+msgid "Pan — drag the page"
+msgstr "Deplasare — trage pagina"
+
+#: src/toolbar.rs:193
+msgid "Text Size"
+msgstr "Mărime text"
+
+#: src/toolbar.rs:196 src/toolbar.rs:199
+msgid "Text Font"
+msgstr "Font"
+
+#: src/toolbar.rs:209
+msgid "Bold (Ctrl+B)"
+msgstr "Aldin (Ctrl+B)"
+
+#: src/toolbar.rs:210
+msgid "Italic (Ctrl+I)"
+msgstr "Cursiv (Ctrl+I)"
+
+#: src/toolbar.rs:211
+msgid "Underline (Ctrl+U)"
+msgstr "Subliniat (Ctrl+U)"
+
+#: src/toolbar.rs:234
+msgid "Undo (Ctrl+Z)"
+msgstr "Anulează (Ctrl+Z)"
+
+#: src/toolbar.rs:240
+msgid "Redo (Ctrl+Shift+Z)"
+msgstr "Refă (Ctrl+Shift+Z)"
+
+#: src/toolbar.rs:596
+msgid "Ink (black, white in dark mode)"
+msgstr "Cerneală (neagră, albă în modul întunecat)"
+
+#: src/toolbar.rs:610
+msgid "Custom Color"
+msgstr "Culoare personalizată"
+
+#: src/toolbar.rs:641
+msgid "Ballpoint"
+msgstr "Pix"
+
+#: src/toolbar.rs:641
+msgid "Even line"
+msgstr "Linie uniformă"
+
+#: src/toolbar.rs:642
+msgid "Fountain"
+msgstr "Stilou"
+
+#: src/toolbar.rs:642
+msgid "Line follows pen pressure"
+msgstr "Linia urmează apăsarea"
+
+#: src/toolbar.rs:673
+msgid "Fine"
+msgstr "Subțire"
+
+#: src/toolbar.rs:673
+msgid "Thick"
+msgstr "Groasă"
+
+#: src/toolbar.rs:744
+msgid "Removes the strokes you touch"
+msgstr "Elimină liniile atinse"
+
+#: src/toolbar.rs:744
+msgid "Whole Stroke"
+msgstr "Linie întreagă"
+
+#: src/toolbar.rs:746
+msgid "Erases only where it passes"
+msgstr "Șterge doar pe unde trece"
+
+#: src/toolbar.rs:746
+msgid "Partial"
+msgstr "Parțial"
+
+#: src/window.rs:139 src/window.rs:2124
+#, rust-format
+msgid "Couldn't open {}: {}"
+msgstr "{} nu a putut fi deschis: {}"
+
+#: src/window.rs:214
+msgid "Reset Zoom (Ctrl+0)"
+msgstr "Resetează zoomul (Ctrl+0)"
+
+#: src/window.rs:220
+msgid "Page Size and Background"
+msgstr "Mărimea și fundalul paginii"
+
+#: src/window.rs:419
+msgid "New Notebook (Ctrl+Shift+N)"
+msgstr "Caiet nou (Ctrl+Shift+N)"
+
+#: src/window.rs:424
+msgid "Follow System"
+msgstr "Ca sistemul"
+
+#: src/window.rs:425
+msgid "Light"
+msgstr "Luminos"
+
+#: src/window.rs:426
+msgid "Dark"
+msgstr "Întunecat"
+
+#: src/window.rs:427
+msgid "Appearance"
+msgstr "Aspect"
+
+#: src/window.rs:429
+msgid "Open Notebooks Folder"
+msgstr "Deschide dosarul caietelor"
+
+#: src/window.rs:430
+msgid "Change Notebooks Folder…"
+msgstr "Schimbă dosarul caietelor…"
+
+#: src/window.rs:434
+msgid "About Ratchet"
+msgstr "Despre Ratchet"
+
+#: src/window.rs:450
+msgid "Main Menu"
+msgstr "Meniu principal"
+
+#: src/window.rs:481
+msgid "Toggle Sidebar (F9)"
+msgstr "Arată/ascunde panoul (F9)"
+
+#: src/window.rs:486
+msgid "New Page (Ctrl+N)"
+msgstr "Pagină nouă (Ctrl+N)"
+
+#: src/window.rs:516
+msgid "Export Page (Ctrl+E)"
+msgstr "Exportă pagina (Ctrl+E)"
+
+#: src/window.rs:545 src/window.rs:1901
+msgid "New Notebook"
+msgstr "Caiet nou"
+
+#: src/window.rs:552
+msgid "No Page Open"
+msgstr "Nicio pagină deschisă"
+
+#: src/window.rs:553
+msgid "Pick a page in the sidebar, or create a notebook for a course."
+msgstr "Alege o pagină din panou sau creează un caiet pentru o materie."
+
+#: src/window.rs:564 src/window.rs:1367
+msgid "Fullscreen (F11)"
+msgstr "Ecran complet (F11)"
+
+#: src/window.rs:1034 src/window.rs:1923
+msgid "New Section"
+msgstr "Secțiune nouă"
+
+#: src/window.rs:1036
+msgid "New Page"
+msgstr "Pagină nouă"
+
+#: src/window.rs:1040
+msgid "Rename…"
+msgstr "Redenumește…"
+
+#: src/window.rs:1041
+msgid "Export…"
+msgstr "Exportă…"
+
+#: src/window.rs:1042
+msgid "Move to Trash"
+msgstr "Mută la coș"
+
+#: src/window.rs:1264
+#, rust-format
+msgid "Couldn't move: {}"
+msgstr "Nu s-a putut muta: {}"
+
+#: src/window.rs:1359
+msgid "Leave Fullscreen (F11)"
+msgstr "Ieși din ecran complet (F11)"
+
+#: src/window.rs:1489
+msgid "Nothing to export: no pages"
+msgstr "Nimic de exportat: nicio pagină"
+
+#: src/window.rs:1495
+#, rust-format
+msgid "{} page"
+msgid_plural "{} pages"
+msgstr[0] "{} pagină"
+msgstr[1] "{} pagini"
+msgstr[2] "{} de pagini"
+
+#: src/window.rs:1497
+msgid "Page"
+msgstr "Pagină"
+
+#: src/window.rs:1498
+msgid "Section"
+msgstr "Secțiune"
+
+#: src/window.rs:1499
+msgid "Notebook"
+msgstr "Caiet"
+
+#: src/window.rs:1521
+#, rust-format
+msgid "{} file"
+msgid_plural "{} files"
+msgstr[0] "{} fișier"
+msgstr[1] "{} fișiere"
+msgstr[2] "{} de fișiere"
+
+#: src/window.rs:1523
+#, rust-format
+msgid "Exported {} to {}"
+msgstr "Exportat: {} în {}"
+
+#: src/window.rs:1534
+#, rust-format
+msgid "Export failed: {}"
+msgstr "Exportul a eșuat: {}"
+
+#: src/window.rs:1592
+#, rust-format
+msgid "New pages in “{}” will use this layout"
+msgstr "Paginile noi din „{}” vor folosi acest aspect"
+
+#: src/window.rs:1593
+#, rust-format
+msgid "Couldn't save section default: {}"
+msgstr "Setarea secțiunii nu a putut fi salvată: {}"
+
+#: src/window.rs:1904
+#, rust-format
+msgid "Couldn't create notebook: {}"
+msgstr "Caietul nu a putut fi creat: {}"
+
+#: src/window.rs:1914 src/window.rs:1961
+#, rust-format
+msgid "Couldn't create page: {}"
+msgstr "Pagina nu a putut fi creată: {}"
+
+#: src/window.rs:1926
+#, rust-format
+msgid "Couldn't create section: {}"
+msgstr "Secțiunea nu a putut fi creată: {}"
+
+#: src/window.rs:1951
+msgid "Select a section first"
+msgstr "Alege mai întâi o secțiune"
+
+#: src/window.rs:2022
+#, rust-format
+msgid "Couldn't rename: {}"
+msgstr "Nu s-a putut redenumi: {}"
+
+#: src/window.rs:2052
+#, rust-format
+msgid "Couldn't delete “{}”: {}"
+msgstr "„{}” nu a putut fi șters: {}"
+
+#: src/window.rs:2059
+#, rust-format
+msgid "“{}” moved to trash"
+msgstr "„{}” a fost mutat la coș"
+
+#: src/window.rs:2070
+#, rust-format
+msgid "Couldn't undo: {}"
+msgstr "Nu s-a putut anula: {}"
+
+#: src/window.rs:2092
+#, rust-format
+msgid "Couldn't move {} to trash: {}"
+msgstr "{} nu a putut fi mutat la coș: {}"
+
+#: src/window.rs:2106
+msgid "Choose Notebooks Folder"
+msgstr "Alege dosarul caietelor"
+
+#: src/window.rs:2136
+msgid "Handwritten notes for university students."
+msgstr "Notițe de mână pentru studenți."

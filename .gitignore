@@ -3,6 +3,7 @@
 
 # Personal Claude Code settings
 .claude/settings.local.json
+/CLAUDE.md
 
 # Launch video (/brag-slim output)
 /brag-output*/

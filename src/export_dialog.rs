@@ -6,6 +6,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::gio;
 
+use crate::i18n::tr;
 use crate::platform::px;
 use crate::settings::{ExportFormat, ExportOptions};
 
@@ -57,46 +58,46 @@ pub fn show(
     let format = choices(
         &[
             ("pdf", "x-office-document-symbolic", "PDF", ""),
-            ("png", "image-x-generic-symbolic", "Image", "PNG, 200 DPI"),
+            ("png", "image-x-generic-symbolic", &tr("Image"), &tr("PNG, 200 DPI")),
         ],
         if current.format == ExportFormat::Png { "png" } else { "pdf" },
     );
-    let format_group = adw::PreferencesGroup::builder().title("Format").build();
+    let format_group = adw::PreferencesGroup::builder().title(tr("Format")).build();
     format_group.add(&format);
 
     // Infinite pages
     let split = choices(
         &[
-            ("split", "view-paged-symbolic", "A4 Pages", "Split into A4 pages"),
-            ("whole", "view-continuous-symbolic", "One Page", "One page, cropped to the content"),
+            ("split", "view-paged-symbolic", &tr("A4 Pages"), &tr("Split into A4 pages")),
+            ("whole", "view-continuous-symbolic", &tr("One Page"), &tr("One page, cropped to the content")),
         ],
         if current.split_a4 { "split" } else { "whole" },
     );
     let split_group = adw::PreferencesGroup::builder()
-        .title("Infinite Pages")
+        .title(tr("Infinite Pages"))
         .visible(subject.has_infinite)
         .build();
     split_group.add(&split);
 
     // Options
     let background = adw::SwitchRow::builder()
-        .title("Page Pattern")
-        .tooltip_text("Lines, grid or dots")
+        .title(tr("Page Pattern"))
+        .tooltip_text(tr("Lines, grid or dots"))
         .active(current.background)
         .build();
     background.add_prefix(&gtk::Image::from_icon_name("view-grid-symbolic"));
-    let open_after = adw::SwitchRow::builder().title("Open When Done").active(current.open_after).build();
+    let open_after = adw::SwitchRow::builder().title(tr("Open When Done")).active(current.open_after).build();
     open_after.add_prefix(&gtk::Image::from_icon_name("folder-open-symbolic"));
     let options = adw::PreferencesGroup::builder()
-        .title("Options")
-        .tooltip_text("Exports always use white paper")
+        .title(tr("Options"))
+        .tooltip_text(tr("Exports always use white paper"))
         .build();
     options.add(&background);
     options.add(&open_after);
 
-    let cancel = gtk::Button::with_label("Cancel");
+    let cancel = gtk::Button::with_label(&tr("Cancel"));
     // css_classes replaces the "text-button" class a label adds; keep it.
-    let go = gtk::Button::builder().label("Export").css_classes(["text-button", "suggested-action"]).build();
+    let go = gtk::Button::builder().label(tr("Export")).css_classes(["text-button", "suggested-action"]).build();
     let header = adw::HeaderBar::builder().show_start_title_buttons(false).show_end_title_buttons(false).build();
     header.pack_start(&cancel);
     header.pack_end(&go);
@@ -109,7 +110,7 @@ pub fn show(
     view.add_top_bar(&header);
     view.set_content(Some(&page));
     let dialog = adw::Dialog::builder()
-        .title("Export")
+        .title(tr("Export"))
         .content_width(px(560.0))
         .child(&view)
         .build();
@@ -132,16 +133,16 @@ pub fn show(
             folder: current.folder.clone(),
         };
         let (ext, mime, label) = match opts.format {
-            ExportFormat::Pdf => ("pdf", "application/pdf", "PDF documents"),
-            ExportFormat::Png => ("png", "image/png", "PNG images"),
+            ExportFormat::Pdf => ("pdf", "application/pdf", tr("PDF documents")),
+            ExportFormat::Png => ("png", "image/png", tr("PNG images")),
         };
         let filter = gtk::FileFilter::new();
         filter.add_mime_type(mime);
-        filter.set_name(Some(label));
+        filter.set_name(Some(&label));
         let filters = gio::ListStore::new::<gtk::FileFilter>();
         filters.append(&filter);
         let save = gtk::FileDialog::builder()
-            .title("Export To")
+            .title(tr("Export To"))
             .initial_name(format!("{file_name}.{ext}"))
             .filters(&filters)
             .default_filter(&filter)

@@ -5,7 +5,7 @@
 #   dnf install rust cargo cargo-c gcc meson ninja-build gtk4-devel \
 #     libadwaita-devel libpng-devel libjpeg-turbo-devel libxml2-devel \
 #     adwaita-icon-theme hicolor-icon-theme desktop-file-utils file wget \
-#     findutils xz
+#     findutils xz gettext
 # The distro's GTK, libadwaita and their dependencies go into the AppImage;
 # glibc, graphics drivers and fontconfig come from the user's system.
 set -euo pipefail
@@ -52,6 +52,13 @@ cargo build --release --locked
 
 rm -rf "$APPDIR"
 install -Dm755 target/release/ratchet "$APPDIR/usr/bin/ratchet"
+
+# Translations, compiled by build.rs next to target/release; the app looks
+# for them in ../share/locale from its executable.
+for lang in $(cat po/LINGUAS); do
+    install -Dm644 "target/share/locale/$lang/LC_MESSAGES/ratchet.mo" \
+        "$APPDIR/usr/share/locale/$lang/LC_MESSAGES/ratchet.mo"
+done
 
 # Image loaders. gdk-pixbuf needs absolute paths in its loader cache, so the
 # cache is a template that AppRun fills in with the AppImage's mount point.

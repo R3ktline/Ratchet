@@ -89,8 +89,7 @@
   background: var(--rt-active);
   color: inherit;
 }
-.navigation-sidebar image.rt-chevron,
-.navigation-sidebar image.rt-page-icon {
+.navigation-sidebar image.rt-chevron {
   color: var(--rt-dim);
 }
 .navigation-sidebar .rt-section-label {
@@ -120,16 +119,19 @@ preferencesgroup label.heading {
 .nb-dot {
   border-radius: 50%;
 }
-.nb-blue { background: #3584e4; }
-.nb-green { background: #33d17a; }
-.nb-orange { background: #ff7800; }
-.nb-purple { background: #9141ac; }
-.nb-red { background: #e01b24; }
-.nb-teal { background: #2190a4; }
-.nb-yellow { background: #f6d32d; }
-.nb-pink { background: #d56199; }
-.nb-brown { background: #986a44; }
-.nb-slate { background: #6f8396; }
+.nb-blue { --nb: #3584e4; }
+.nb-green { --nb: #33d17a; }
+.nb-orange { --nb: #ff7800; }
+.nb-purple { --nb: #9141ac; }
+.nb-red { --nb: #e01b24; }
+.nb-teal { --nb: #2190a4; }
+.nb-yellow { --nb: #f6d32d; }
+.nb-pink { --nb: #d56199; }
+.nb-brown { --nb: #986a44; }
+.nb-slate { --nb: #6f8396; }
+.nb-dot, .rt-section-tab { background: var(--nb); }
+/* Subject / section-type icons (kinds.rs) take the notebook's color. */
+.navigation-sidebar image.rt-kind-icon { color: var(--nb); }
 
 .notebook-row label {
   font-weight: bold;

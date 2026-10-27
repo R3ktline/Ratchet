@@ -59,6 +59,20 @@ fn content_bounds(page: &PageFile, texts: &[text::TextBox]) -> Option<ink::Bound
     })
 }
 
+/// Move a page cut at `cut` up into the gap above anything it would slice
+/// through (`spans` are items' top and bottom). Keeps `cut` when one item
+/// is taller than the slice from `top`.
+fn cut_above(spans: &[(f32, f32)], top: f32, cut: f32) -> f32 {
+    let mut c = cut;
+    while let Some(y0) = spans.iter().filter(|&&(y0, y1)| y0 < c && c < y1).map(|s| s.0).reduce(f32::min) {
+        if y0 <= top {
+            return cut;
+        }
+        c = y0;
+    }
+    c
+}
+
 /// Background lines drawn individually (crisp vectors in the PDF).
 fn draw_pattern(s: &gtk::Snapshot, bg: Background, area: gtk::graphene::Rect) {
     let spacing = match bg {
@@ -210,13 +224,23 @@ pub fn page_sheets(page: &PageFile, ctx: Option<&pango::Context>, opts: &ExportO
             // even when the content is narrower.
             let scale = ((a4.0 - 2.0 * margin) / cw).min(1.0);
             let (slice_w, slice) = ((a4.0 - 2.0 * margin) / scale, (a4.1 - 2.0 * margin) / scale);
-            let count = (ch / slice).ceil().max(1.0) as usize;
-            (0..count)
-                .map(|k| {
-                    let src = rect(b.x0, b.y0 + k as f32 * slice, slice_w, slice);
-                    sheet(page, &texts, ctx, opts, Placement { size: a4, src, offset: (margin, margin), scale })
-                })
-                .collect()
+            let spans: Vec<(f32, f32)> = page
+                .strokes
+                .iter()
+                .map(|s| (s.bounds.y0, s.bounds.y1))
+                .chain(texts.iter().map(|t| (t.bounds().y0, t.bounds().y1)))
+                .collect();
+            let mut out = Vec::new();
+            let mut top = b.y0;
+            loop {
+                let cut = cut_above(&spans, top, top + slice);
+                let src = rect(b.x0, top, slice_w, cut - top);
+                out.push(sheet(page, &texts, ctx, opts, Placement { size: a4, src, offset: (margin, margin), scale }));
+                if cut >= b.y1 {
+                    break out;
+                }
+                top = cut;
+            }
         }
     }
 }
@@ -284,7 +308,8 @@ pub fn write_pdf(doc: &Doc, path: &Path) -> Result<(), String> {
         }
     }
     surface.finish();
-    Ok(())
+    // finish() writes the file; a full disk only shows up here.
+    surface.status().map_err(err)
 }
 
 /// PNG files for the sheets: `path` for one sheet, else `name-01.png`, …
@@ -348,6 +373,16 @@ mod tests {
             texts: Vec::new(),
             extra: Default::default(),
         }
+    }
+
+    #[test]
+    fn cuts_between_lines() {
+        // Two overlapping strokes straddle 100: cut above both.
+        assert_eq!(cut_above(&[(10.0, 20.0), (90.0, 110.0), (80.0, 95.0)], 0.0, 100.0), 80.0);
+        // Nothing in the way.
+        assert_eq!(cut_above(&[(10.0, 20.0)], 0.0, 100.0), 100.0);
+        // Item taller than the slice: cut through it.
+        assert_eq!(cut_above(&[(0.0, 300.0)], 0.0, 100.0), 100.0);
     }
 
     /// GTK can only be initialized from one thread per process, and each

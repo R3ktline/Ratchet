@@ -7,6 +7,7 @@ use std::rc::Rc;
 use adw::prelude::*;
 
 use crate::glyphs::{shapes_glyph, wave_glyph};
+use crate::i18n::tr;
 use crate::platform::px;
 use crate::radial_editor;
 use crate::settings::{ButtonAction, PenSlot, RadialItem, Smoothing};
@@ -44,8 +45,8 @@ fn hold_row(
     row.add_prefix(icon);
     let secs = value_ms.unwrap_or(default_ms) as f64 / 1000.0;
     let time = adw::SpinRow::builder()
-        .title("Hold For")
-        .subtitle("Seconds")
+        .title(tr("Hold For"))
+        .subtitle(tr("Seconds"))
         .adjustment(&gtk::Adjustment::new(secs, HOLD_MIN, HOLD_MAX, 0.05, 0.25, 0.0))
         .digits(2)
         .build();
@@ -58,6 +59,10 @@ fn row_glyph(glyph: gtk::DrawingArea) -> gtk::DrawingArea {
     glyph.set_content_width(px(16.0));
     glyph.set_content_height(px(16.0));
     glyph
+}
+
+fn string_list<const N: usize>(labels: [String; N]) -> gtk::StringList {
+    gtk::StringList::new(&labels.each_ref().map(String::as_str))
 }
 
 fn icon_row<R: IsA<adw::ActionRow>>(row: R, icon: &str) -> R {
@@ -77,26 +82,26 @@ pub fn build(
 ) -> adw::Dialog {
     // Ink
     let smoothing = adw::ComboRow::builder()
-        .title("Smoothing")
-        .tooltip_text("Higher smooths out wobble; the line trails the pen a little more")
-        .model(&gtk::StringList::new(&Smoothing::ALL.map(Smoothing::label)))
+        .title(tr("Smoothing"))
+        .tooltip_text(tr("Higher smooths out wobble; the line trails the pen a little more"))
+        .model(&string_list(Smoothing::ALL.map(Smoothing::label)))
         .selected(Smoothing::ALL.iter().position(|s| *s == current.smoothing).unwrap_or(2) as u32)
         .build();
     smoothing.add_prefix(&row_glyph(wave_glyph()));
     let (shapes, shape_time) = hold_row(
-        "Snap to Shapes",
-        "Hold still at the end of a stroke",
-        "Straight lines (snapping to 15°), arrows and circles",
+        &tr("Snap to Shapes"),
+        &tr("Hold still at the end of a stroke"),
+        &tr("Straight lines (snapping to 15°), arrows and circles"),
         &row_glyph(shapes_glyph()),
         current.shape_hold_ms,
         500,
     );
-    let ink = adw::PreferencesGroup::builder().title("Ink").build();
+    let ink = adw::PreferencesGroup::builder().title(tr("Ink")).build();
     ink.add(&smoothing);
     ink.add(&shapes);
 
     // Pen buttons
-    let actions = gtk::StringList::new(&ButtonAction::ALL.map(ButtonAction::label));
+    let actions = string_list(ButtonAction::ALL.map(ButtonAction::label));
     let pos = |a: ButtonAction| ButtonAction::ALL.iter().position(|x| *x == a).unwrap_or(0) as u32;
     let button_row = |title: &str, tooltip: &str, icon: &str, value: ButtonAction| {
         icon_row(
@@ -105,41 +110,47 @@ pub fn build(
         )
     };
     let button_2 = button_row(
-        "Lower Side Button",
-        "Middle click: press while hovering, or hold while touching",
+        &tr("Lower Side Button"),
+        &tr("Middle click: press while hovering, or hold while touching"),
         "input-mouse-symbolic",
         current.button_2,
     );
-    let button_3 = button_row("Upper Side Button", "Right click: hold while touching", "input-mouse-symbolic", current.button_3);
+    let button_3 = button_row(
+        &tr("Upper Side Button"),
+        &tr("Right click: hold while touching"),
+        "input-mouse-symbolic",
+        current.button_3,
+    );
     let eraser = button_row(
-        "Eraser End",
-        "The flipped pen, or a button your tablet driver maps to eraser",
+        &tr("Eraser End"),
+        &tr("The flipped pen, or a button your tablet driver maps to eraser"),
         "edit-clear-symbolic",
         current.eraser,
     );
     let info = gtk::Image::builder()
         .icon_name("dialog-information-symbolic")
-        .tooltip_text("Which button is which? Debug › Pen Input Overlay (RATCHET_DEBUG=1)")
+        .tooltip_text(tr("Which button is which? Debug › Pen Input Overlay (RATCHET_DEBUG=1)"))
         .css_classes(["dim-label"])
         .build();
-    let buttons = adw::PreferencesGroup::builder().title("Pen Buttons").header_suffix(&info).build();
+    let buttons = adw::PreferencesGroup::builder().title(tr("Pen Buttons")).header_suffix(&info).build();
     buttons.add(&button_2);
     buttons.add(&button_3);
     buttons.add(&eraser);
 
     // Radial menu
     let (long_press, long_press_time) = hold_row(
-        "Long Press",
-        "Hold the pen still to open it",
-        "Without moving, anywhere on the page",
+        &tr("Long Press"),
+        &tr("Hold the pen still to open it"),
+        &tr("Without moving, anywhere on the page"),
         &gtk::Image::from_icon_name("preferences-system-time-symbolic"),
         current.long_press_ms,
         720,
     );
-    let customize = adw::ButtonRow::builder().title("Customize Items…").start_icon_name("view-app-grid-symbolic").build();
+    let customize =
+        adw::ButtonRow::builder().title(tr("Customize Items…")).start_icon_name("view-app-grid-symbolic").build();
     let radial = adw::PreferencesGroup::builder()
-        .title("Radial Menu")
-        .tooltip_text("Point at an item and release, or touch, slide toward it and lift. The center or Esc closes it.")
+        .title(tr("Radial Menu"))
+        .tooltip_text(tr("Point at an item and release, or touch, slide toward it and lift. The center or Esc closes it."))
         .build();
     radial.add(&long_press);
     radial.add(&customize);
@@ -168,7 +179,7 @@ pub fn build(
     view.add_top_bar(&adw::HeaderBar::new());
     view.set_content(Some(&columns));
     let dialog = adw::Dialog::builder()
-        .title("Preferences")
+        .title(tr("Preferences"))
         .content_width(px(900.0))
         .child(&view)
         .build();

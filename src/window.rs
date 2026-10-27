@@ -15,6 +15,8 @@ use crate::debug::{self, LogWindow};
 use crate::ink::PX_PER_MM;
 use crate::export;
 use crate::export_dialog;
+use crate::i18n::{tr, trf, trn};
+use crate::kinds;
 use crate::library::{Detached, Library, PageFile, Target};
 use crate::settings::ExportFormat;
 use crate::page_menu;
@@ -134,7 +136,7 @@ impl Window {
             Ok(lib) => (lib, None),
             Err(e) => (
                 Library { root: root.clone(), notebooks: Vec::new() },
-                Some(format!("Couldn't open {}: {e}", root.display())),
+                Some(trf("Couldn't open {}: {}", &[&root.display().to_string(), &e.to_string()])),
             ),
         };
 
@@ -209,13 +211,13 @@ impl Window {
 
             zoom_button: gtk::Button::builder()
                 .label("100%")
-                .tooltip_text("Reset Zoom (Ctrl+0)")
+                .tooltip_text(tr("Reset Zoom (Ctrl+0)"))
                 .action_name("win.zoom-reset")
                 .css_classes(["flat", "numeric", "text-button"])
                 .build(),
             page_button: gtk::MenuButton::builder()
                 .icon_name("document-page-setup-symbolic")
-                .tooltip_text("Page Size and Background")
+                .tooltip_text(tr("Page Size and Background"))
                 .css_classes(["flat"])
                 .build(),
             debug_flags: Default::default(),
@@ -414,22 +416,22 @@ impl Window {
         // Sidebar
         let new_notebook = gtk::Button::builder()
             .icon_name("list-add-symbolic")
-            .tooltip_text("New Notebook (Ctrl+Shift+N)")
+            .tooltip_text(tr("New Notebook (Ctrl+Shift+N)"))
             .action_name("win.new-notebook")
             .build();
         let main_menu = gio::Menu::new();
         let theme = gio::Menu::new();
-        theme.append(Some("Follow System"), Some("win.theme::system"));
-        theme.append(Some("Light"), Some("win.theme::light"));
-        theme.append(Some("Dark"), Some("win.theme::dark"));
-        main_menu.append_section(Some("Appearance"), &theme);
+        theme.append(Some(&tr("Follow System")), Some("win.theme::system"));
+        theme.append(Some(&tr("Light")), Some("win.theme::light"));
+        theme.append(Some(&tr("Dark")), Some("win.theme::dark"));
+        main_menu.append_section(Some(&tr("Appearance")), &theme);
         let folder = gio::Menu::new();
-        folder.append(Some("Open Notebooks Folder"), Some("win.open-folder"));
-        folder.append(Some("Change Notebooks Folder…"), Some("win.change-folder"));
+        folder.append(Some(&tr("Open Notebooks Folder")), Some("win.open-folder"));
+        folder.append(Some(&tr("Change Notebooks Folder…")), Some("win.change-folder"));
         main_menu.append_section(None, &folder);
         let about = gio::Menu::new();
-        about.append(Some("Preferences"), Some("win.preferences"));
-        about.append(Some("About Ratchet"), Some("win.about"));
+        about.append(Some(&tr("Preferences")), Some("win.preferences"));
+        about.append(Some(&tr("About Ratchet")), Some("win.about"));
         main_menu.append_section(None, &about);
         if debug::enabled() {
             let dbg = gio::Menu::new();
@@ -445,7 +447,7 @@ impl Window {
             let button = gtk::MenuButton::builder()
                 .icon_name("app.ratchet.notes-symbolic")
                 .menu_model(&main_menu)
-                .tooltip_text("Main Menu")
+                .tooltip_text(tr("Main Menu"))
                 .css_classes(["app-logo"])
                 .primary(true)
                 .build();
@@ -476,12 +478,12 @@ impl Window {
         // Content
         let toggle_sidebar = gtk::ToggleButton::builder()
             .icon_name("sidebar-show-symbolic")
-            .tooltip_text("Toggle Sidebar (F9)")
+            .tooltip_text(tr("Toggle Sidebar (F9)"))
             .active(true)
             .build();
         let new_page = gtk::Button::builder()
             .icon_name("document-new-symbolic")
-            .tooltip_text("New Page (Ctrl+N)")
+            .tooltip_text(tr("New Page (Ctrl+N)"))
             .action_name("win.new-page-here")
             .build();
         // Shown while the sidebar (and its logo) is hidden.
@@ -510,8 +512,8 @@ impl Window {
         // Export gets a labeled button of its own, apart from the view
         // controls, so it's easy to find.
         let export = gtk::Button::builder()
-            .child(&adw::ButtonContent::builder().icon_name("send-to-symbolic").label("Export").build())
-            .tooltip_text("Export Page (Ctrl+E)")
+            .child(&adw::ButtonContent::builder().icon_name("send-to-symbolic").label(tr("Export")).build())
+            .tooltip_text(tr("Export Page (Ctrl+E)"))
             .action_name("win.export-page")
             .valign(gtk::Align::Center)
             .css_classes(["rt-export"])
@@ -540,15 +542,15 @@ impl Window {
         self.canvas.connect_zoom(move |z| zoom_button.set_label(&format!("{:.0}%", z * 100.0)));
 
         let create_first = gtk::Button::builder()
-            .label("New Notebook")
+            .label(tr("New Notebook"))
             .halign(gtk::Align::Center)
             .css_classes(["text-button", "pill", "suggested-action"])
             .action_name("win.new-notebook")
             .build();
         let empty = adw::StatusPage::builder()
             .icon_name("accessories-text-editor-symbolic")
-            .title("No Page Open")
-            .description("Pick a page in the sidebar, or create a notebook for a course.")
+            .title(tr("No Page Open"))
+            .description(tr("Pick a page in the sidebar, or create a notebook for a course."))
             .child(&create_first)
             .build();
         self.stack.add_named(&empty, Some("empty"));
@@ -559,7 +561,7 @@ impl Window {
 
         let fullscreen = gtk::Button::builder()
             .icon_name("view-fullscreen-symbolic")
-            .tooltip_text("Fullscreen (F11)")
+            .tooltip_text(tr("Fullscreen (F11)"))
             .action_name("win.fullscreen")
             .build();
 
@@ -840,13 +842,14 @@ impl Window {
         let s = platform::ui_scale();
         let mut widest: f64 = 0.0;
         for nb in &st.lib.notebooks {
-            widest = widest.max((10.0 + 8.0) * s + text_width(&nb.name, true));
+            // Dot or icon (16 px either way) and its spacing.
+            widest = widest.max((16.0 + 8.0) * s + text_width(&nb.name, true));
             for sec in &nb.sections {
-                // Indent, chevron, tab and their spacing.
-                widest = widest.max((16.0 + 16.0 + 8.0 + 4.0 + 8.0) * s + text_width(&sec.name, false));
+                // Indent, chevron, tab or icon, and their spacing.
+                widest = widest.max((16.0 + 16.0 + 8.0 + 16.0 + 8.0) * s + text_width(&sec.name, false));
                 for page in &sec.pages {
-                    // Indent, spacer, page icon and their spacing.
-                    widest = widest.max((32.0 + 16.0 + 8.0 + 16.0 + 8.0) * s + text_width(&page.title, false));
+                    // Indent, spacer and its spacing.
+                    widest = widest.max((32.0 + 16.0 + 8.0) * s + text_width(&page.title, false));
                 }
             }
         }
@@ -866,6 +869,12 @@ impl Window {
         label: &str,
     ) -> gtk::ListBoxRow {
         let hbox = gtk::Box::builder().spacing((8.0 * platform::ui_scale()).round() as i32).build();
+        // Chevron and icon/dot/tab: clicking them opens or closes the
+        // notebook/section; the name is left for double-click rename.
+        let lead = gtk::Box::builder()
+            .spacing(hbox.spacing())
+            .css_classes(["rt-toggle"])
+            .build();
         match expanded {
             // Notebooks show only their color dot (arrows there are clutter).
             Some(_) if depth == 0 => {}
@@ -873,36 +882,60 @@ impl Window {
                 let icon = if open { "pan-down-symbolic" } else { "pan-end-symbolic" };
                 let chevron = gtk::Image::from_icon_name(icon);
                 chevron.add_css_class("rt-chevron");
-                hbox.append(&chevron);
+                lead.append(&chevron);
             }
             // Align pages with their section's label.
             None => hbox.append(&gtk::Box::builder().width_request((16.0 * platform::ui_scale()).round() as i32).build()),
         }
-        match (depth, color) {
-            // Notebook: its color dot.
-            (0, Some(color)) => {
+        let kind_icon = match depth {
+            0 => kinds::subject(label).map(|s| s.icon),
+            1 => kinds::section_icon(label),
+            _ => None,
+        };
+        match (depth, color, kind_icon) {
+            // An icon for what it is (math, lecture…) in the notebook's color.
+            (0 | 1, Some(color), Some(icon)) => {
+                let image = gtk::Image::from_icon_name(icon);
+                image.set_css_classes(&["rt-kind-icon", &format!("nb-{color}")]);
+                lead.append(&image);
+            }
+            // Notebook: its color dot, in a 16 px slot like the icons so
+            // names line up.
+            (0, Some(color), None) => {
                 let dot = gtk::Box::builder()
                     .valign(gtk::Align::Center)
+                    .margin_start(platform::px(3.0))
+                    .margin_end(platform::px(3.0))
                     .css_classes(["nb-dot", &format!("nb-{color}")])
                     .build();
-                hbox.append(&dot);
+                lead.append(&dot);
             }
             // Section: a OneNote-style tab in the notebook's color.
-            (1, Some(color)) => {
+            (1, Some(color), None) => {
                 let tab = gtk::Box::builder()
                     .height_request(platform::px(14.0))
                     .valign(gtk::Align::Center)
+                    .margin_start(platform::px(6.0))
+                    .margin_end(platform::px(6.0))
                     .css_classes(["rt-section-tab", &format!("nb-{color}")])
                     .build();
-                hbox.append(&tab);
+                lead.append(&tab);
             }
             _ => {}
         }
-        // Pages: a small page icon (Notion).
-        if depth == 2 {
-            let icon = gtk::Image::from_icon_name("x-office-document-symbolic");
-            icon.add_css_class("rt-page-icon");
-            hbox.append(&icon);
+        if depth < 2 {
+            let click = gtk::GestureClick::builder().button(gdk::BUTTON_PRIMARY).build();
+            let weak = self.weak();
+            click.connect_pressed(move |g, _, _, _| {
+                let this = upgrade!(weak);
+                g.set_state(gtk::EventSequenceState::Claimed);
+                let row = g.widget().and_then(|w| w.ancestor(gtk::ListBoxRow::static_type()));
+                if let Some(target) = row.and_downcast_ref().and_then(|r| this.row_target(r)) {
+                    this.toggle_target(target);
+                }
+            });
+            lead.add_controller(click);
+            hbox.append(&lead);
         }
         let text = gtk::Label::builder()
             .label(label)
@@ -950,14 +983,28 @@ impl Window {
 
     fn install_sidebar_input(self: &Rc<Self>) {
         let weak = self.weak();
+        // Clicking a notebook/section name doesn't open or close it (the
+        // chevron/icon does, see make_row), so a double click only renames.
         self.list.connect_row_activated(move |_, row| {
             let this = upgrade!(weak);
             let target = this.state.borrow().rows.get(row.index() as usize).copied();
             match target {
-                Some(Target::Notebook(n)) => this.toggle_expanded(n, None),
-                Some(Target::Section(n, s)) => this.toggle_expanded(n, Some(s)),
+                Some(Target::Section(n, s)) => {
+                    let mut st = this.state.borrow_mut();
+                    let nb = &st.lib.notebooks[n];
+                    st.current_section = Some([nb.dir.clone(), nb.sections[s].dir.clone()]);
+                }
                 Some(Target::Page(n, s, p)) => this.open_page(n, s, p),
-                None => {}
+                _ => {}
+            }
+        });
+        // Enter still opens and closes them.
+        let weak = self.weak();
+        self.list.connect_activate_cursor_row(move |list| {
+            let this = upgrade!(weak);
+            let row = list.focus_child().and_downcast::<gtk::ListBoxRow>();
+            if let Some(target) = row.and_then(|r| this.row_target(&r)) {
+                this.toggle_target(target);
             }
         });
 
@@ -973,15 +1020,20 @@ impl Window {
 
         // Double click renames. Runs in the capture phase on the list (rows
         // are rebuilt by the first click) and claims the second press so it
-        // doesn't also activate the row.
+        // doesn't also activate the row. Not on the chevron/icon, which
+        // only opens and closes.
         let double = gtk::GestureClick::builder()
             .button(gdk::BUTTON_PRIMARY)
             .propagation_phase(gtk::PropagationPhase::Capture)
             .build();
         let weak = self.weak();
-        double.connect_pressed(move |g, n_press, _, y| {
+        double.connect_pressed(move |g, n_press, x, y| {
             let this = upgrade!(weak);
             if n_press != 2 || this.state.borrow().editing {
+                return;
+            }
+            let picked = this.list.pick(x, y, gtk::PickFlags::DEFAULT);
+            if std::iter::successors(picked, |w| w.parent()).any(|w| w.has_css_class("rt-toggle")) {
                 return;
             }
             let Some(row) = this.list.row_at_y(y as i32) else { return };
@@ -1012,20 +1064,28 @@ impl Window {
             gio::MenuItem::new(Some(label), Some(&format!("win.{action}::{arg}")))
         };
         match target {
-            Target::Notebook(_) => menu.append_item(&item("New Section", "new-section", &t)),
+            Target::Notebook(_) => menu.append_item(&item(&tr("New Section"), "new-section", &t)),
             Target::Section(..) | Target::Page(..) => {
-                menu.append_item(&item("New Page", "new-page", &t))
+                menu.append_item(&item(&tr("New Page"), "new-page", &t))
             }
         }
         let edit = gio::Menu::new();
-        edit.append_item(&item("Rename…", "rename", &t));
-        edit.append_item(&item("Export…", "export", &t));
-        edit.append_item(&item("Move to Trash", "delete", &t));
+        edit.append_item(&item(&tr("Rename…"), "rename", &t));
+        edit.append_item(&item(&tr("Export…"), "export", &t));
+        edit.append_item(&item(&tr("Move to Trash"), "delete", &t));
         menu.append_section(None, &edit);
 
         self.menu.set_menu_model(Some(&menu));
         self.menu.set_pointing_to(Some(&gdk::Rectangle::new(x as i32, y as i32, 1, 1)));
         self.menu.popup();
+    }
+
+    fn toggle_target(self: &Rc<Self>, target: Target) {
+        match target {
+            Target::Notebook(n) => self.toggle_expanded(n, None),
+            Target::Section(n, s) => self.toggle_expanded(n, Some(s)),
+            Target::Page(..) => {}
+        }
     }
 
     /// Expand or collapse with a slide: children slide in after expanding,
@@ -1242,7 +1302,7 @@ impl Window {
         match result {
             Ok((Some((n, s)), _)) => self.expand(n, Some(s)),
             Ok(_) => {}
-            Err(e) => self.toast(&format!("Couldn't move: {e}")),
+            Err(e) => self.toast(&trf("Couldn't move: {}", &[&e.to_string()])),
         }
         self.retarget_open_page();
         self.rebuild_sidebar();
@@ -1337,7 +1397,7 @@ impl Window {
                     content.set_extend_content_to_top_edge(true);
                     content.set_reveal_top_bars(false);
                     button.set_icon_name("view-restore-symbolic");
-                    button.set_tooltip_text(Some("Leave Fullscreen (F11)"));
+                    button.set_tooltip_text(Some(&tr("Leave Fullscreen (F11)")));
                 } else {
                     let (shown, collapsed) = saved.get();
                     content.set_reveal_top_bars(true);
@@ -1345,7 +1405,7 @@ impl Window {
                     split.set_collapsed(collapsed);
                     split.set_show_sidebar(shown);
                     button.set_icon_name("view-fullscreen-symbolic");
-                    button.set_tooltip_text(Some("Fullscreen (F11)"));
+                    button.set_tooltip_text(Some(&tr("Fullscreen (F11)")));
                 }
             });
         }
@@ -1429,7 +1489,7 @@ impl Window {
         let Some(target) = target else { return };
         // Make sure the open page's latest ink is on disk.
         self.canvas.flush();
-        let (title, entries) = {
+        let (title, full_name, entries) = {
             let st = self.state.borrow();
             let lib = &st.lib;
             let load = |n: usize, s: usize, p: usize, section: Option<String>| {
@@ -1438,12 +1498,20 @@ impl Window {
             };
             match target {
                 Target::Page(n, s, p) => {
-                    (lib.notebooks[n].sections[s].pages[p].title.clone(), load(n, s, p, None).into_iter().collect())
+                    let (nb, sec) = (&lib.notebooks[n], &lib.notebooks[n].sections[s]);
+                    let title = sec.pages[p].title.clone();
+                    // "Seminar 4" in section "Seminar" is "Algebra Seminar 4".
+                    let full = if title.to_lowercase().starts_with(&sec.name.to_lowercase()) {
+                        format!("{} {title}", nb.name)
+                    } else {
+                        format!("{} {} {title}", nb.name, sec.name)
+                    };
+                    (title, full, load(n, s, p, None).into_iter().collect())
                 }
                 Target::Section(n, s) => {
                     let sec = &lib.notebooks[n].sections[s];
                     let entries: Vec<_> = (0..sec.pages.len()).filter_map(|p| load(n, s, p, None)).collect();
-                    (sec.name.clone(), entries)
+                    (sec.name.clone(), format!("{} {}", lib.notebooks[n].name, sec.name), entries)
                 }
                 Target::Notebook(n) => {
                     let nb = &lib.notebooks[n];
@@ -1454,25 +1522,22 @@ impl Window {
                         .flat_map(|(s, sec)| (0..sec.pages.len()).map(move |p| (s, p, sec.name.clone())))
                         .filter_map(|(s, p, name)| load(n, s, p, Some(name)))
                         .collect();
-                    (nb.name.clone(), entries)
+                    (nb.name.clone(), nb.name.clone(), entries)
                 }
             }
         };
         if entries.is_empty() {
-            self.toast("Nothing to export: no pages");
+            self.toast(&tr("Nothing to export: no pages"));
             return;
         }
         let current = self.state.borrow().settings.export.clone();
         let weak = self.weak();
-        let file_name = crate::library::sanitize(&title);
-        let pages = match entries.len() {
-            1 => "1 page".to_string(),
-            n => format!("{n} pages"),
-        };
+        let file_name = crate::library::sanitize(&full_name);
+        let pages = trn("{} page", "{} pages", entries.len());
         let detail = match target {
-            Target::Page(..) => "Page".to_string(),
-            Target::Section(..) => format!("Section · {pages}"),
-            Target::Notebook(..) => format!("Notebook · {pages}"),
+            Target::Page(..) => tr("Page"),
+            Target::Section(..) => format!("{} · {pages}", tr("Section")),
+            Target::Notebook(..) => format!("{} · {pages}", tr("Notebook")),
         };
         let name = title.clone();
         let subject = export_dialog::Subject {
@@ -1494,8 +1559,9 @@ impl Window {
             };
             match result {
                 Ok(files) => {
-                    let what = if files.len() > 1 { format!("{} files", files.len()) } else { "1 file".into() };
-                    this.toast(&format!("Exported {what} to {}", path.parent().map_or(String::new(), |p| p.display().to_string())));
+                    let what = trn("{} file", "{} files", files.len());
+                    let dir = path.parent().map_or(String::new(), |p| p.display().to_string());
+                    this.toast(&trf("Exported {} to {}", &[&what, &dir]));
                     if opts.open_after
                         && let Some(first) = files.first()
                     {
@@ -1506,7 +1572,7 @@ impl Window {
                         );
                     }
                 }
-                Err(e) => this.toast(&format!("Export failed: {e}")),
+                Err(e) => this.toast(&trf("Export failed: {}", &[&e.to_string()])),
             }
         });
     }
@@ -1564,8 +1630,8 @@ impl Window {
                     let Some((n, s)) = this.open_section() else { return };
                     let result = this.state.borrow_mut().lib.set_section_layout(n, s, layout);
                     match result {
-                        Ok(()) => this.toast(&format!("New pages in “{section_name}” will use this layout")),
-                        Err(e) => this.toast(&format!("Couldn't save section default: {e}")),
+                        Ok(()) => this.toast(&trf("New pages in “{}” will use this layout", &[&section_name])),
+                        Err(e) => this.toast(&trf("Couldn't save section default: {}", &[&e.to_string()])),
                     }
                 }),
                 unit_changed: Box::new(move |unit| {
@@ -1705,7 +1771,8 @@ impl Window {
             _ => None,
         }
         .or(s.pens.first());
-        let brush = pen.map(|p| Brush { tool: p.tool, color: p.color, width: p.width_mm * PX_PER_MM });
+        let brush =
+            pen.map(|p| Brush { tool: p.tool, color: p.color, width: p.width_mm * PX_PER_MM, fountain: p.fountain });
         if tool != CanvasTool::Select {
             self.canvas.clear_selection();
         }
@@ -1816,7 +1883,9 @@ impl Window {
         let (Some(row), Some(label)) = (row, label) else { return };
         let hbox = label.parent().and_downcast::<gtk::Box>().expect("row layout");
 
-        let entry = gtk::Entry::builder().text(&current).hexpand(true).build();
+        // width_chars(1): an Entry's default minimum (~150 px) is wider than
+        // the sidebar leaves it on deep rows; hexpand still fills the row.
+        let entry = gtk::Entry::builder().text(&current).hexpand(true).width_chars(1).build();
         label.set_visible(false);
         hbox.append(&entry);
         self.state.borrow_mut().editing = true;
@@ -1872,10 +1941,10 @@ impl Window {
 
     fn new_notebook(self: &Rc<Self>) {
         self.flush_pending_delete();
-        let result = self.state.borrow_mut().lib.create_notebook("New Notebook");
+        let result = self.state.borrow_mut().lib.create_notebook(&tr("New Notebook"));
         let n = match result {
             Ok(n) => n,
-            Err(e) => return self.toast(&format!("Couldn't create notebook: {e}")),
+            Err(e) => return self.toast(&trf("Couldn't create notebook: {}", &[&e.to_string()])),
         };
         // Ready to write straight away: page 1 of the first section is open.
         let landscape = self.screen_is_landscape();
@@ -1885,7 +1954,7 @@ impl Window {
                 self.expand(n, Some(0));
                 self.open_page(n, 0, p);
             }
-            Err(e) => self.toast(&format!("Couldn't create page: {e}")),
+            Err(e) => self.toast(&trf("Couldn't create page: {}", &[&e.to_string()])),
         }
         self.rebuild_sidebar();
         self.start_inline_rename(Target::Notebook(n), None);
@@ -1894,10 +1963,10 @@ impl Window {
     fn new_section(self: &Rc<Self>, target: Option<Target>) {
         let Some(Target::Notebook(n)) = target else { return };
         self.flush_pending_delete();
-        let result = self.state.borrow_mut().lib.create_section(n, "New Section");
+        let result = self.state.borrow_mut().lib.create_section(n, &tr("New Section"));
         let s = match result {
             Ok(s) => s,
-            Err(e) => return self.toast(&format!("Couldn't create section: {e}")),
+            Err(e) => return self.toast(&trf("Couldn't create section: {}", &[&e.to_string()])),
         };
         self.expand(n, Some(s));
         self.rebuild_sidebar();
@@ -1922,7 +1991,7 @@ impl Window {
             }
         };
         let Some((n, s)) = section else {
-            self.toast("Select a section first");
+            self.toast(&tr("Select a section first"));
             return;
         };
         let landscape = self.screen_is_landscape();
@@ -1932,7 +2001,7 @@ impl Window {
                 self.expand(n, Some(s));
                 self.open_page(n, s, p);
             }
-            Err(e) => self.toast(&format!("Couldn't create page: {e}")),
+            Err(e) => self.toast(&trf("Couldn't create page: {}", &[&e.to_string()])),
         }
         self.rebuild_sidebar();
     }
@@ -1962,7 +2031,7 @@ impl Window {
                 Target::Notebook(n) => {
                     let old = st.lib.notebooks[n].dir.clone();
                     let prefixes: Vec<String> =
-                        st.expanded.iter().filter(|k| k.starts_with(&old)).cloned().collect();
+                        st.expanded.iter().filter(|k| **k == old || k.starts_with(&format!("{old}/"))).cloned().collect();
                     let r = st.lib.rename_notebook(n, name);
                     let new = st.lib.notebooks[n].dir.clone();
                     for k in prefixes {
@@ -1993,7 +2062,7 @@ impl Window {
             result
         };
         if let Err(e) = result {
-            self.toast(&format!("Couldn't rename: {e}"));
+            self.toast(&trf("Couldn't rename: {}", &[&e.to_string()]));
         }
         self.retarget_open_page();
         self.rebuild_sidebar();
@@ -2023,15 +2092,15 @@ impl Window {
             }
         };
         if let Err(e) = result {
-            self.toast(&format!("Couldn't delete “{name}”: {e}"));
+            self.toast(&trf("Couldn't delete “{}”: {}", &[&name, &e.to_string()]));
             return;
         }
         self.rebuild_sidebar();
         self.update_content();
 
         let toast = adw::Toast::builder()
-            .title(format!("“{name}” moved to trash"))
-            .button_label("Undo")
+            .title(trf("“{}” moved to trash", &[&name]))
+            .button_label(tr("Undo"))
             .priority(adw::ToastPriority::High)
             .build();
         let weak = self.weak();
@@ -2041,7 +2110,7 @@ impl Window {
             if let Some(p) = pending {
                 let result = this.state.borrow_mut().lib.reattach(p.detached);
                 if let Err(e) = result {
-                    this.toast(&format!("Couldn't undo: {e}"));
+                    this.toast(&trf("Couldn't undo: {}", &[&e.to_string()]));
                 }
                 this.rebuild_sidebar();
                 this.update_content();
@@ -2063,7 +2132,7 @@ impl Window {
     fn flush_pending_delete(&self) {
         let Some(p) = self.state.borrow_mut().pending.take() else { return };
         if let Err(e) = gio::File::for_path(&p.path).trash(gio::Cancellable::NONE) {
-            self.toast(&format!("Couldn't move {} to trash: {e}", p.path.display()));
+            self.toast(&trf("Couldn't move {} to trash: {}", &[&p.path.display().to_string(), &e.to_string()]));
         }
     }
 
@@ -2077,7 +2146,7 @@ impl Window {
     }
 
     fn change_folder(self: &Rc<Self>) {
-        let dialog = gtk::FileDialog::builder().title("Choose Notebooks Folder").build();
+        let dialog = gtk::FileDialog::builder().title(tr("Choose Notebooks Folder")).build();
         let weak = self.weak();
         dialog.select_folder(Some(&self.window), gio::Cancellable::NONE, move |res| {
             let this = upgrade!(weak);
@@ -2095,7 +2164,7 @@ impl Window {
                     st.current_section = None;
                     st.expanded.clear();
                 }
-                Err(e) => this.toast(&format!("Couldn't open {}: {e}", dir.display())),
+                Err(e) => this.toast(&trf("Couldn't open {}: {}", &[&dir.display().to_string(), &e.to_string()])),
             }
             this.rebuild_sidebar();
             this.update_content();
@@ -2107,7 +2176,7 @@ impl Window {
             .application_name("Ratchet")
             .application_icon(crate::APP_ID)
             .version(env!("CARGO_PKG_VERSION"))
-            .comments("Handwritten notes for university students.")
+            .comments(tr("Handwritten notes for university students."))
             .developer_name("r3ktline")
             .build()
             .present(Some(&self.window));

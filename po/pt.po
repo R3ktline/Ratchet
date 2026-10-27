@@ -1,0 +1,769 @@
+# Portuguese translation of Ratchet.
+msgid ""
+msgstr ""
+"Project-Id-Version: ratchet 1.0.0\n"
+"Report-Msgid-Bugs-To: https://github.com/R3ktline/Ratchet/issues\n"
+"POT-Creation-Date: 2026-10-23 18:41+0300\n"
+"Language: pt\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: src/canvas.rs:923
+#, rust-format
+msgid "Couldn't open page: {}"
+msgstr "Não foi possível abrir a página: {}"
+
+#: src/canvas.rs:1005
+#, rust-format
+msgid "Couldn't save page: {}"
+msgstr "Não foi possível guardar a página: {}"
+
+#: src/export_dialog.rs:61
+msgid "Image"
+msgstr "Imagem"
+
+#: src/export_dialog.rs:61
+msgid "PNG, 200 DPI"
+msgstr "PNG, 200 DPI"
+
+#: src/export_dialog.rs:65
+msgid "Format"
+msgstr "Formato"
+
+#: src/export_dialog.rs:71
+msgid "A4 Pages"
+msgstr "Páginas A4"
+
+#: src/export_dialog.rs:71
+msgid "Split into A4 pages"
+msgstr "Dividir em páginas A4"
+
+#: src/export_dialog.rs:72
+msgid "One Page"
+msgstr "Uma página"
+
+#: src/export_dialog.rs:72
+msgid "One page, cropped to the content"
+msgstr "Uma só página, recortada ao conteúdo"
+
+#: src/export_dialog.rs:77
+msgid "Infinite Pages"
+msgstr "Páginas infinitas"
+
+#: src/export_dialog.rs:84
+msgid "Page Pattern"
+msgstr "Padrão da página"
+
+#: src/export_dialog.rs:85
+msgid "Lines, grid or dots"
+msgstr "Linhas, quadrícula ou pontos"
+
+#: src/export_dialog.rs:89
+msgid "Open When Done"
+msgstr "Abrir no fim"
+
+#: src/export_dialog.rs:92
+msgid "Options"
+msgstr "Opções"
+
+#: src/export_dialog.rs:93
+msgid "Exports always use white paper"
+msgstr "As exportações usam sempre papel branco"
+
+#: src/export_dialog.rs:98
+msgid "Cancel"
+msgstr "Cancelar"
+
+#: src/export_dialog.rs:100 src/export_dialog.rs:113 src/window.rs:515
+msgid "Export"
+msgstr "Exportar"
+
+#: src/export_dialog.rs:136
+msgid "PDF documents"
+msgstr "Documentos PDF"
+
+#: src/export_dialog.rs:137
+msgid "PNG images"
+msgstr "Imagens PNG"
+
+#: src/export_dialog.rs:145
+msgid "Export To"
+msgstr "Exportar para"
+
+#: src/kinds.rs:31
+msgid "Assignment"
+msgstr "Tarefa"
+
+#: src/kinds.rs:40
+msgid "Exercise"
+msgstr "Exercício"
+
+#: src/kinds.rs:46
+msgid "Tutorial"
+msgstr "Tutoria"
+
+#: src/kinds.rs:47
+msgid "Seminar"
+msgstr "Seminário"
+
+#: src/kinds.rs:50
+msgid "Lab"
+msgstr "Laboratório"
+
+#: src/kinds.rs:58
+msgid "Exam"
+msgstr "Exame"
+
+#: src/kinds.rs:66
+msgid "Summary"
+msgstr "Resumo"
+
+#: src/kinds.rs:74
+msgid "Project"
+msgstr "Projeto"
+
+#: src/kinds.rs:79
+msgid "Lecture"
+msgstr "Aula"
+
+#: src/library.rs:41
+msgid "Assignments"
+msgstr "Tarefas"
+
+#: src/library.rs:41
+msgid "Course"
+msgstr "Aulas"
+
+#: src/library.rs:124
+msgid "US Letter"
+msgstr "Carta EUA"
+
+#: src/library.rs:125
+msgid "US Legal"
+msgstr "Ofício EUA"
+
+#: src/library.rs:126
+msgid "Tabloid"
+msgstr "Tabloide"
+
+#: src/library.rs:127
+msgid "Slide 16:9"
+msgstr "Slide 16:9"
+
+#: src/library.rs:128
+msgid "Slide 4:3"
+msgstr "Slide 4:3"
+
+#: src/library.rs:129 src/page_menu.rs:131
+msgid "Custom"
+msgstr "Personalizado"
+
+#: src/page_menu.rs:129
+msgid "Infinite"
+msgstr "Infinita"
+
+#: src/page_menu.rs:134
+msgid "Paper"
+msgstr "Papel"
+
+#: src/page_menu.rs:137
+msgid "Sheets turn to match the screen on new pages"
+msgstr "As páginas novas orientam-se como o ecrã"
+
+#: src/page_menu.rs:141
+msgid "Landscape"
+msgstr "Paisagem"
+
+#: src/page_menu.rs:150
+msgid "Width"
+msgstr "Largura"
+
+#: src/page_menu.rs:151
+msgid "Height"
+msgstr "Altura"
+
+#: src/page_menu.rs:153
+msgid "Unit"
+msgstr "Unidade"
+
+#: src/page_menu.rs:288
+msgid "Blank"
+msgstr "Em branco"
+
+#: src/page_menu.rs:289
+msgid "Lines"
+msgstr "Linhas"
+
+#: src/page_menu.rs:290
+msgid "Grid"
+msgstr "Quadrícula"
+
+#: src/page_menu.rs:291
+msgid "Dots"
+msgstr "Pontos"
+
+#: src/page_menu.rs:312
+msgid "Set as Default"
+msgstr "Predefinir"
+
+#: src/page_menu.rs:313
+#, rust-format
+msgid "Use for new pages in “{}”"
+msgstr "Usar nas páginas novas de “{}”"
+
+#: src/preferences.rs:48
+msgid "Hold For"
+msgstr "Duração"
+
+#: src/preferences.rs:49
+msgid "Seconds"
+msgstr "Segundos"
+
+#: src/preferences.rs:85
+msgid "Smoothing"
+msgstr "Suavização"
+
+#: src/preferences.rs:86
+msgid "Higher smooths out wobble; the line trails the pen a little more"
+msgstr ""
+"Mais alto remove tremores; o traço segue a caneta com um pouco mais de atraso"
+
+#: src/preferences.rs:92
+msgid "Snap to Shapes"
+msgstr "Formas automáticas"
+
+#: src/preferences.rs:93
+msgid "Hold still at the end of a stroke"
+msgstr "Parar no fim do traço"
+
+#: src/preferences.rs:94
+msgid "Straight lines (snapping to 15°), arrows and circles"
+msgstr "Linhas retas (em passos de 15°), setas e círculos"
+
+#: src/preferences.rs:99
+msgid "Ink"
+msgstr "Tinta"
+
+#: src/preferences.rs:113
+msgid "Lower Side Button"
+msgstr "Botão lateral inferior"
+
+#: src/preferences.rs:114
+msgid "Middle click: press while hovering, or hold while touching"
+msgstr "Clique do meio: premir sem tocar, ou manter ao tocar"
+
+#: src/preferences.rs:119
+msgid "Upper Side Button"
+msgstr "Botão lateral superior"
+
+#: src/preferences.rs:120
+msgid "Right click: hold while touching"
+msgstr "Clique direito: manter ao tocar"
+
+#: src/preferences.rs:125
+msgid "Eraser End"
+msgstr "Ponta borracha"
+
+#: src/preferences.rs:126
+msgid "The flipped pen, or a button your tablet driver maps to eraser"
+msgstr ""
+"A caneta virada, ou um botão que o controlador da mesa associa à borracha"
+
+#: src/preferences.rs:132
+msgid "Which button is which? Debug › Pen Input Overlay (RATCHET_DEBUG=1)"
+msgstr "Qual botão é qual? Debug › Pen Input Overlay (RATCHET_DEBUG=1)"
+
+#: src/preferences.rs:135
+msgid "Pen Buttons"
+msgstr "Botões da caneta"
+
+#: src/preferences.rs:142
+msgid "Long Press"
+msgstr "Toque longo"
+
+#: src/preferences.rs:143
+msgid "Hold the pen still to open it"
+msgstr "Caneta parada para abrir"
+
+#: src/preferences.rs:144
+msgid "Without moving, anywhere on the page"
+msgstr "Sem mexer, em qualquer parte da página"
+
+#: src/preferences.rs:150
+msgid "Customize Items…"
+msgstr "Personalizar…"
+
+#: src/preferences.rs:152 src/radial_editor.rs:348
+msgid "Radial Menu"
+msgstr "Menu radial"
+
+#: src/preferences.rs:153
+msgid ""
+"Point at an item and release, or touch, slide toward it and lift. The center "
+"or Esc closes it."
+msgstr ""
+"Aponte para um item e solte, ou toque, deslize até ele e levante. O centro "
+"ou Esc fecha-o."
+
+#: src/preferences.rs:182 src/window.rs:433
+msgid "Preferences"
+msgstr "Preferências"
+
+#: src/radial_editor.rs:32
+#, rust-format
+msgid "Pen {}"
+msgstr "Caneta {}"
+
+#: src/radial_editor.rs:36
+#, rust-format
+msgid "Highlighter {}"
+msgstr "Marcador {}"
+
+#: src/radial_editor.rs:125
+#, rust-format
+msgid "{} of {} items"
+msgstr "{} de {} itens"
+
+#: src/radial_editor.rs:228 src/toolbar.rs:702
+msgid "Remove"
+msgstr "Remover"
+
+#: src/radial_editor.rs:305
+msgid ""
+"Drag items onto the ring to add them, onto a spot to replace it. Drag a spot "
+"onto another to swap, or drag it off the ring to remove it. Or tap a spot, "
+"then an item."
+msgstr ""
+"Arraste itens para o anel para os adicionar, ou para um lugar para o "
+"substituir. Arraste um lugar para outro para os trocar, ou para fora do anel "
+"para o remover. Ou toque num lugar e depois num item."
+
+#: src/radial_editor.rs:311
+msgid "Reset to Defaults"
+msgstr "Repor"
+
+#: src/settings.rs:226
+msgid "Off"
+msgstr "Desligado"
+
+#: src/settings.rs:227
+msgid "Low"
+msgstr "Baixa"
+
+#: src/settings.rs:228 src/toolbar.rs:673
+msgid "Medium"
+msgstr "Média"
+
+#: src/settings.rs:229
+msgid "High"
+msgstr "Alta"
+
+#: src/settings.rs:261 src/settings.rs:335
+msgid "Eraser"
+msgstr "Borracha"
+
+#: src/settings.rs:262
+msgid "Pan"
+msgstr "Deslocar"
+
+#: src/settings.rs:263 src/settings.rs:336
+msgid "Select"
+msgstr "Selecionar"
+
+#: src/settings.rs:264
+msgid "Draw"
+msgstr "Desenhar"
+
+#: src/settings.rs:265
+msgid "Menu"
+msgstr "Menu"
+
+#: src/settings.rs:266
+msgid "Click"
+msgstr "Clique"
+
+#: src/settings.rs:334
+#, rust-format
+msgid "Pen slot {}"
+msgstr "Lugar de caneta {}"
+
+#: src/settings.rs:337
+msgid "Text"
+msgstr "Texto"
+
+#: src/settings.rs:338
+msgid "Pan (hand tool)"
+msgstr "Deslocar (mão)"
+
+#: src/settings.rs:339 src/window.rs:2060
+msgid "Undo"
+msgstr "Desfazer"
+
+#: src/settings.rs:340
+msgid "Redo"
+msgstr "Refazer"
+
+#: src/settings.rs:341
+msgid "New page"
+msgstr "Nova página"
+
+#: src/settings.rs:342
+msgid "Paste"
+msgstr "Colar"
+
+#: src/settings.rs:343
+msgid "Zoom to 100%"
+msgstr "Zoom a 100%"
+
+#: src/settings.rs:344
+msgid "Fullscreen"
+msgstr "Ecrã inteiro"
+
+#: src/settings.rs:345
+msgid "(empty)"
+msgstr "(vazio)"
+
+#: src/text.rs:43
+msgid "Small"
+msgstr "Pequeno"
+
+#: src/text.rs:44
+msgid "Normal"
+msgstr "Normal"
+
+#: src/text.rs:45
+msgid "Large"
+msgstr "Grande"
+
+#: src/text.rs:46
+msgid "Heading"
+msgstr "Título"
+
+#: src/toolbar.rs:86
+#, rust-format
+msgid "Pen {} mm (click again to edit)"
+msgstr "Caneta {} mm (clique outra vez para editar)"
+
+#: src/toolbar.rs:87
+#, rust-format
+msgid "Highlighter {} mm (click again to edit)"
+msgstr "Marcador {} mm (clique outra vez para editar)"
+
+#: src/toolbar.rs:148
+msgid "Eraser (click again for options)"
+msgstr "Borracha (clique outra vez para opções)"
+
+#: src/toolbar.rs:153
+msgid "Select strokes — draw a loop or tap a stroke"
+msgstr "Selecionar traços — desenhe um laço ou toque num traço"
+
+#: src/toolbar.rs:162
+msgid "Pen"
+msgstr "Caneta"
+
+#: src/toolbar.rs:163
+msgid "Highlighter"
+msgstr "Marcador"
+
+#: src/toolbar.rs:166
+msgid "Text Tool"
+msgstr "Ferramenta de texto"
+
+#: src/toolbar.rs:170
+msgid "Add Tool"
+msgstr "Adicionar ferramenta"
+
+#: src/toolbar.rs:177
+msgid "Text (T) — click to type, drag to set a width; $…$ for math"
+msgstr ""
+"Texto (T) — clique para escrever, arraste para a largura; $…$ para fórmulas"
+
+#: src/toolbar.rs:184
+msgid "Pan — drag the page"
+msgstr "Deslocar — arraste a página"
+
+#: src/toolbar.rs:193
+msgid "Text Size"
+msgstr "Tamanho do texto"
+
+#: src/toolbar.rs:196 src/toolbar.rs:199
+msgid "Text Font"
+msgstr "Tipo de letra"
+
+#: src/toolbar.rs:209
+msgid "Bold (Ctrl+B)"
+msgstr "Negrito (Ctrl+B)"
+
+#: src/toolbar.rs:210
+msgid "Italic (Ctrl+I)"
+msgstr "Itálico (Ctrl+I)"
+
+#: src/toolbar.rs:211
+msgid "Underline (Ctrl+U)"
+msgstr "Sublinhado (Ctrl+U)"
+
+#: src/toolbar.rs:234
+msgid "Undo (Ctrl+Z)"
+msgstr "Desfazer (Ctrl+Z)"
+
+#: src/toolbar.rs:240
+msgid "Redo (Ctrl+Shift+Z)"
+msgstr "Refazer (Ctrl+Shift+Z)"
+
+#: src/toolbar.rs:596
+msgid "Ink (black, white in dark mode)"
+msgstr "Tinta (preta, branca no modo escuro)"
+
+#: src/toolbar.rs:610
+msgid "Custom Color"
+msgstr "Cor personalizada"
+
+#: src/toolbar.rs:641
+msgid "Ballpoint"
+msgstr "Esferográfica"
+
+#: src/toolbar.rs:641
+msgid "Even line"
+msgstr "Traço uniforme"
+
+#: src/toolbar.rs:642
+msgid "Fountain"
+msgstr "Aparo"
+
+#: src/toolbar.rs:642
+msgid "Line follows pen pressure"
+msgstr "O traço segue a pressão"
+
+#: src/toolbar.rs:673
+msgid "Fine"
+msgstr "Fino"
+
+#: src/toolbar.rs:673
+msgid "Thick"
+msgstr "Grosso"
+
+#: src/toolbar.rs:744
+msgid "Removes the strokes you touch"
+msgstr "Remove os traços que toca"
+
+#: src/toolbar.rs:744
+msgid "Whole Stroke"
+msgstr "Traço inteiro"
+
+#: src/toolbar.rs:746
+msgid "Erases only where it passes"
+msgstr "Apaga só por onde passa"
+
+#: src/toolbar.rs:746
+msgid "Partial"
+msgstr "Parcial"
+
+#: src/window.rs:139 src/window.rs:2124
+#, rust-format
+msgid "Couldn't open {}: {}"
+msgstr "Não foi possível abrir {}: {}"
+
+#: src/window.rs:214
+msgid "Reset Zoom (Ctrl+0)"
+msgstr "Repor zoom (Ctrl+0)"
+
+#: src/window.rs:220
+msgid "Page Size and Background"
+msgstr "Tamanho e fundo da página"
+
+#: src/window.rs:419
+msgid "New Notebook (Ctrl+Shift+N)"
+msgstr "Novo caderno (Ctrl+Shift+N)"
+
+#: src/window.rs:424
+msgid "Follow System"
+msgstr "Como o sistema"
+
+#: src/window.rs:425
+msgid "Light"
+msgstr "Claro"
+
+#: src/window.rs:426
+msgid "Dark"
+msgstr "Escuro"
+
+#: src/window.rs:427
+msgid "Appearance"
+msgstr "Aparência"
+
+#: src/window.rs:429
+msgid "Open Notebooks Folder"
+msgstr "Abrir pasta dos cadernos"
+
+#: src/window.rs:430
+msgid "Change Notebooks Folder…"
+msgstr "Mudar pasta dos cadernos…"
+
+#: src/window.rs:434
+msgid "About Ratchet"
+msgstr "Sobre o Ratchet"
+
+#: src/window.rs:450
+msgid "Main Menu"
+msgstr "Menu principal"
+
+#: src/window.rs:481
+msgid "Toggle Sidebar (F9)"
+msgstr "Mostrar/ocultar painel (F9)"
+
+#: src/window.rs:486
+msgid "New Page (Ctrl+N)"
+msgstr "Nova página (Ctrl+N)"
+
+#: src/window.rs:516
+msgid "Export Page (Ctrl+E)"
+msgstr "Exportar página (Ctrl+E)"
+
+#: src/window.rs:545 src/window.rs:1901
+msgid "New Notebook"
+msgstr "Novo caderno"
+
+#: src/window.rs:552
+msgid "No Page Open"
+msgstr "Nenhuma página aberta"
+
+#: src/window.rs:553
+msgid "Pick a page in the sidebar, or create a notebook for a course."
+msgstr "Escolha uma página no painel ou crie um caderno para uma disciplina."
+
+#: src/window.rs:564 src/window.rs:1367
+msgid "Fullscreen (F11)"
+msgstr "Ecrã inteiro (F11)"
+
+#: src/window.rs:1034 src/window.rs:1923
+msgid "New Section"
+msgstr "Nova secção"
+
+#: src/window.rs:1036
+msgid "New Page"
+msgstr "Nova página"
+
+#: src/window.rs:1040
+msgid "Rename…"
+msgstr "Mudar o nome…"
+
+#: src/window.rs:1041
+msgid "Export…"
+msgstr "Exportar…"
+
+#: src/window.rs:1042
+msgid "Move to Trash"
+msgstr "Mover para o lixo"
+
+#: src/window.rs:1264
+#, rust-format
+msgid "Couldn't move: {}"
+msgstr "Não foi possível mover: {}"
+
+#: src/window.rs:1359
+msgid "Leave Fullscreen (F11)"
+msgstr "Sair do ecrã inteiro (F11)"
+
+#: src/window.rs:1489
+msgid "Nothing to export: no pages"
+msgstr "Nada para exportar: sem páginas"
+
+#: src/window.rs:1495
+#, rust-format
+msgid "{} page"
+msgid_plural "{} pages"
+msgstr[0] "{} página"
+msgstr[1] "{} páginas"
+
+#: src/window.rs:1497
+msgid "Page"
+msgstr "Página"
+
+#: src/window.rs:1498
+msgid "Section"
+msgstr "Secção"
+
+#: src/window.rs:1499
+msgid "Notebook"
+msgstr "Caderno"
+
+#: src/window.rs:1521
+#, rust-format
+msgid "{} file"
+msgid_plural "{} files"
+msgstr[0] "{} ficheiro"
+msgstr[1] "{} ficheiros"
+
+#: src/window.rs:1523
+#, rust-format
+msgid "Exported {} to {}"
+msgstr "Exportado: {} para {}"
+
+#: src/window.rs:1534
+#, rust-format
+msgid "Export failed: {}"
+msgstr "A exportação falhou: {}"
+
+#: src/window.rs:1592
+#, rust-format
+msgid "New pages in “{}” will use this layout"
+msgstr "As páginas novas de “{}” vão usar este esquema"
+
+#: src/window.rs:1593
+#, rust-format
+msgid "Couldn't save section default: {}"
+msgstr "Não foi possível guardar a predefinição da secção: {}"
+
+#: src/window.rs:1904
+#, rust-format
+msgid "Couldn't create notebook: {}"
+msgstr "Não foi possível criar o caderno: {}"
+
+#: src/window.rs:1914 src/window.rs:1961
+#, rust-format
+msgid "Couldn't create page: {}"
+msgstr "Não foi possível criar a página: {}"
+
+#: src/window.rs:1926
+#, rust-format
+msgid "Couldn't create section: {}"
+msgstr "Não foi possível criar a secção: {}"
+
+#: src/window.rs:1951
+msgid "Select a section first"
+msgstr "Escolha primeiro uma secção"
+
+#: src/window.rs:2022
+#, rust-format
+msgid "Couldn't rename: {}"
+msgstr "Não foi possível mudar o nome: {}"
+
+#: src/window.rs:2052
+#, rust-format
+msgid "Couldn't delete “{}”: {}"
+msgstr "Não foi possível eliminar “{}”: {}"
+
+#: src/window.rs:2059
+#, rust-format
+msgid "“{}” moved to trash"
+msgstr "“{}” movido para o lixo"
+
+#: src/window.rs:2070
+#, rust-format
+msgid "Couldn't undo: {}"
+msgstr "Não foi possível desfazer: {}"
+
+#: src/window.rs:2092
+#, rust-format
+msgid "Couldn't move {} to trash: {}"
+msgstr "Não foi possível mover {} para o lixo: {}"
+
+#: src/window.rs:2106
+msgid "Choose Notebooks Folder"
+msgstr "Escolher pasta dos cadernos"
+
+#: src/window.rs:2136
+msgid "Handwritten notes for university students."
+msgstr "Apontamentos à mão para estudantes universitários."

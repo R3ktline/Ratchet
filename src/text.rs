@@ -11,6 +11,7 @@ use gtk::prelude::*;
 use gtk::{gdk, graphene};
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::tr;
 use crate::ink::InkColor;
 use crate::math::{self, Formula};
 
@@ -37,12 +38,12 @@ impl TextSize {
         }
     }
 
-    pub fn label(self) -> &'static str {
+    pub fn label(self) -> String {
         match self {
-            TextSize::Small => "Small",
-            TextSize::Normal => "Normal",
-            TextSize::Large => "Large",
-            TextSize::Heading => "Heading",
+            TextSize::Small => tr("Small"),
+            TextSize::Normal => tr("Normal"),
+            TextSize::Large => tr("Large"),
+            TextSize::Heading => tr("Heading"),
         }
     }
 }

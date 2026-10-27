@@ -14,6 +14,7 @@ use adw::prelude::*;
 use gtk::{gdk, glib};
 
 use crate::glyphs::radial_glyph;
+use crate::i18n::{tr, trf};
 use crate::settings::{PenSlot, RADIAL_MAX, RADIAL_MIN, RadialItem, default_radial};
 
 const RING: i32 = 320;
@@ -28,11 +29,11 @@ fn shelf_items(pens: &[PenSlot]) -> Vec<(RadialItem, String)> {
         let label = match p.tool {
             crate::ink::Tool::Pen => {
                 n_pen += 1;
-                format!("Pen {n_pen}")
+                trf("Pen {}", &[&n_pen.to_string()])
             }
             crate::ink::Tool::Highlighter => {
                 n_hl += 1;
-                format!("Highlighter {n_hl}")
+                trf("Highlighter {}", &[&n_hl.to_string()])
             }
         };
         out.push((RadialItem::Slot(i), label));
@@ -121,7 +122,7 @@ impl Editor {
         *self.spots.borrow_mut() = spots;
         self.popping.set(None);
         let len = items.len();
-        self.count.set_text(&format!("{len} of {RADIAL_MAX} items"));
+        self.count.set_text(&trf("{} of {} items", &[&len.to_string(), &RADIAL_MAX.to_string()]));
         self.remove.set_sensitive(self.picked.get().is_some() && len > RADIAL_MIN);
     }
 
@@ -224,7 +225,7 @@ pub fn show(
     });
     ring.put(&disc, 0.0, 0.0);
 
-    let remove = gtk::Button::builder().label("Remove").css_classes(["text-button", "destructive-action"]).sensitive(false).build();
+    let remove = gtk::Button::builder().label(tr("Remove")).css_classes(["text-button", "destructive-action"]).sensitive(false).build();
     let count = gtk::Label::builder().css_classes(["dim-label", "caption"]).build();
 
     let editor = Rc::new(Editor {
@@ -301,13 +302,13 @@ pub fn show(
     shelf_box.add_controller(drop);
 
     let hint = gtk::Label::builder()
-        .label("Drag items onto the ring to add them, onto a spot to replace it. Drag a spot onto another to swap, or drag it off the ring to remove it. Or tap a spot, then an item.")
+        .label(tr("Drag items onto the ring to add them, onto a spot to replace it. Drag a spot onto another to swap, or drag it off the ring to remove it. Or tap a spot, then an item."))
         .wrap(true)
         .max_width_chars(52)
         .justify(gtk::Justification::Center)
         .css_classes(["dim-label"])
         .build();
-    let reset = gtk::Button::builder().label("Reset to Defaults").build();
+    let reset = gtk::Button::builder().label(tr("Reset to Defaults")).build();
     let ed = Rc::downgrade(&editor);
     reset.connect_clicked(move |_| {
         if let Some(ed) = ed.upgrade() {
@@ -344,7 +345,7 @@ pub fn show(
     view.add_top_bar(&adw::HeaderBar::new());
     view.set_content(Some(&content));
     let dialog = adw::Dialog::builder()
-        .title("Radial Menu")
+        .title(tr("Radial Menu"))
         .content_width(crate::platform::px(540.0))
         .child(&view)
         .build();

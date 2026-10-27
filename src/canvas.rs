@@ -15,6 +15,7 @@ use adw::prelude::*;
 use gtk::subclass::prelude::*;
 use gtk::{gdk, glib, graphene, gsk};
 
+use crate::i18n::trf;
 use crate::ink::{self, InkColor, Point, Smoother, Stroke, Strokes, Tool};
 use crate::library::{Background, PageFile, PageLayout, PageSize};
 use crate::shapes::{self, ShapeKind};
@@ -66,6 +67,7 @@ pub struct Brush {
     pub color: InkColor,
     /// Width in page units.
     pub width: f32,
+    pub fountain: bool,
 }
 
 /// What the main tool (pen tip / left mouse button) does.
@@ -368,8 +370,10 @@ mod imp {
         pub(super) extent: Cell<(f32, f32)>,
         pub(super) history: RefCell<History>,
         pub(super) view: Cell<View>,
-        /// Undo history and view of pages opened earlier in this session.
-        pub(super) stashed: RefCell<HashMap<PathBuf, (History, View)>>,
+        /// Open page's `created` stamp, telling it apart from a later page at the same path.
+        pub(super) created: RefCell<String>,
+        /// Undo history and view of pages opened earlier in this session, with their `created`.
+        pub(super) stashed: RefCell<HashMap<PathBuf, (String, History, View)>>,
         pub(super) dirty: Cell<bool>,
         pub(super) save_timer: RefCell<Option<glib::SourceId>>,
         pub(super) live: RefCell<Option<Live>>,
@@ -424,6 +428,7 @@ mod imp {
                 extent: Cell::new((0.0, 0.0)),
                 history: RefCell::default(),
                 view: Cell::default(),
+                created: RefCell::default(),
                 stashed: RefCell::default(),
                 dirty: Cell::new(false),
                 save_timer: RefCell::default(),
@@ -437,7 +442,7 @@ mod imp {
                 cache: RefCell::default(),
                 config: RefCell::new(Config {
                     tool: CanvasTool::Draw,
-                    brush: Brush { tool: Tool::Pen, color: InkColor::Ink, width: 0.7 * ink::PX_PER_MM },
+                    brush: Brush { tool: Tool::Pen, color: InkColor::Ink, width: 0.7 * ink::PX_PER_MM, fountain: false },
                     eraser_mode: EraserMode::Stroke,
                     stabilizer_mm: 1.0,
                     smooth_passes: 2,
@@ -902,10 +907,10 @@ impl Canvas {
         imp.sel_texts.borrow_mut().clear();
         if let Some(old) = imp.path.take() {
             let history = imp.history.take();
-            imp.stashed.borrow_mut().insert(old, (history, imp.view.get()));
+            imp.stashed.borrow_mut().insert(old, (imp.created.take(), history, imp.view.get()));
         }
         let ctx = self.pango_context();
-        let (layout, strokes, texts) = match path.map(PageFile::load) {
+        let (layout, strokes, texts, created) = match path.map(PageFile::load) {
             Some(Ok(page)) => (
                 page.layout,
                 page.strokes.into_iter().map(Rc::new).collect(),
@@ -916,20 +921,26 @@ impl Canvas {
                         Rc::new(t)
                     })
                     .collect(),
+                page.created,
             ),
             Some(Err(e)) => {
-                self.report(format!("Couldn't open page: {e}"));
-                (PageLayout::default(), Vec::new(), Vec::new())
+                self.report(trf("Couldn't open page: {}", &[&e.to_string()]));
+                (PageLayout::default(), Vec::new(), Vec::new(), String::new())
             }
-            None => (PageLayout::default(), Vec::new(), Vec::new()),
+            None => (PageLayout::default(), Vec::new(), Vec::new(), String::new()),
         };
         imp.layout.set(layout);
         *imp.strokes.borrow_mut() = strokes;
         *imp.texts.borrow_mut() = texts;
         self.update_extent();
+        // A page deleted or renamed away leaves its history under its old path;
+        // a new page there must not inherit it.
         let (history, view) = path
             .and_then(|p| imp.stashed.borrow_mut().remove(p))
+            .filter(|(c, ..)| *c == created)
+            .map(|(_, h, v)| (h, v))
             .unwrap_or_else(|| (History::default(), self.initial_view()));
+        *imp.created.borrow_mut() = created;
         *imp.history.borrow_mut() = history;
         *imp.path.borrow_mut() = path.map(Path::to_path_buf);
         self.set_view(view);
@@ -1000,7 +1011,7 @@ impl Canvas {
         if let Err(e) = result {
             // Still unsaved: the next flush (edit, page switch, exit) retries.
             imp.dirty.set(true);
-            self.report(format!("Couldn't save page: {e}"));
+            self.report(trf("Couldn't save page: {}", &[&e.to_string()]));
         }
     }
 
@@ -1818,6 +1829,7 @@ impl Canvas {
                 let (px, py) = self.to_page(x, y);
                 let raw = Point { x: px, y: py, p };
                 let mut stroke = Stroke::new(brush.tool, brush.color, brush.width);
+                stroke.fountain = brush.fountain;
                 stroke.points.push(raw);
                 // String length is in screen mm, so it feels the same at any zoom.
                 let mut smoother = Smoother::new(radius_mm * ink::PX_PER_MM / self.zoom());

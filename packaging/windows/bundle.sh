@@ -57,6 +57,21 @@ gtk4-update-icon-cache -q -t -f "$DIST/share/icons/Adwaita"
 # Fontconfig's configuration, used by Pango's font lookup.
 cp -r "$PREFIX/etc/fonts" "$DIST/etc/"
 
+# Translations: ours (compiled by build.rs, which needs gettext's msgfmt),
+# plus GTK's, libadwaita's and GLib's for their own dialogs and buttons.
+for lang in $(cat po/LINGUAS); do
+    if [ ! -f "target/share/locale/$lang/LC_MESSAGES/ratchet.mo" ]; then
+        echo "No $lang translation in target/share/locale; is msgfmt installed?" >&2
+        exit 1
+    fi
+    mkdir -p "$DIST/share/locale/$lang/LC_MESSAGES"
+    cp "target/share/locale/$lang/LC_MESSAGES/ratchet.mo" "$DIST/share/locale/$lang/LC_MESSAGES/"
+    for domain in gtk40 libadwaita glib20; do
+        mo="$PREFIX/share/locale/$lang/LC_MESSAGES/$domain.mo"
+        [ -f "$mo" ] && cp "$mo" "$DIST/share/locale/$lang/LC_MESSAGES/"
+    done
+done
+
 cp LICENSE "$DIST/LICENSE.txt"
 
 echo "Bundled into $DIST ($(du -sh "$DIST" | cut -f1))"

@@ -7,7 +7,9 @@ mod debug;
 mod export;
 mod export_dialog;
 mod glyphs;
+mod i18n;
 mod ink;
+mod kinds;
 mod library;
 mod math;
 mod naming;
@@ -30,6 +32,7 @@ const APP_ID: &str = "app.ratchet.notes";
 
 fn main() -> glib::ExitCode {
     platform::early_setup();
+    i18n::init();
     gio::resources_register_include!("ratchet.gresource").expect("register resources");
     let app = adw::Application::builder().application_id(APP_ID).build();
     // Styles and icons come from the resources (see data/ratchet.gresource.xml).
